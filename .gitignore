@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Environments
+.env/
+.venv/
+env/
+venv/
+env_jax/
+
+# Data - DO NOT PUSH
+data/
+*.npz
+*.npy
+*.h5
+*.hdf5
+*.csv
+
+# Models / checkpoints - DO NOT PUSH
+Models_*/
+checkpoints/
+params_snapshots/
+*.msgpack
+*.ckpt
+checkpoint_*
+
+# Generated optimisation/results - DO NOT PUSH
+optimiser_notebook_results/
+results/
+outputs/
+
+# Logs - DO NOT PUSH
+*.log
+run_log.txt
+check_run.log
+test_vectors_log.txt
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
