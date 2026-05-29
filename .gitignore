@@ -1,25 +1,32 @@
-# Local/generated data
-data/
-*.npz
-*.npy
-
-# Trained models and checkpoints
-Models_*/
-*.pkl
-*.pickle
-*.ckpt
-*.flax
-*.msgpack
-
-# Local logs
-*.log
-check_run.log
-
-# Python cache
+# Python
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
 
-# Streaming training scripts not included in public/repo version
-model_training_streaming.py
-model_training_streaming_utils.py
+# Data files
+data/
+*.npz
+
+# Model outputs
+Models*/
+Models_notebook_test/
+*.msgpack
+checkpoints/
+orbax-checkpoint-tmp-*/
+
+# Optimisation / experiment outputs
+optimiser_notebook_results/
+optimiser_results/
+results/
+
+# Logs
+*.log
+*.out
+*.err
+logging/
+check_runs.log
+
+# Environment files
+.env
+.venv/
+env/

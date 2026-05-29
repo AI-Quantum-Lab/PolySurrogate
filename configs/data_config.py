@@ -9,22 +9,22 @@ Edit these values for quick tests or full data-generation runs.
 # =============================================================================
 
 # Graph / quantum-state setup
-VERTICES = 10
+VERTICES = 4
 DIMENSIONS = 2
 
 # Dataset size
-N_SAMPLES = 20_000_000
-BATCH_SIZE = 50000
+N_SAMPLES = 1000
+BATCH_SIZE = 100
 
 # Reproducibility
-SEED = 59
+SEED = 0
 
 # Saving
 SAVE_TO_FILE = True
-OUT_DIR = f"data/node{VERTICES}_test"
-SHARD_SIZE =  500_000
+OUT_DIR = 'data/smoke_test'
+SHARD_SIZE =  1000
 
 # Output target type
 # True  -> amplitudes are normalized: ||psi||_2 = 1
 # False -> raw, unnormalized perfect-matching amplitudes
-NORMED_DATA = False
+NORMED_DATA = True

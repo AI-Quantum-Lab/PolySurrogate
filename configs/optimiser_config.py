@@ -17,7 +17,7 @@ from pathlib import Path
 # =============================================================================
 
 NPHOTONS = 8
-TARGET_NAME = "W"          # "GHZ", "W", "LINEAR_CLUSTER", "SINGLE"
+TARGET_NAME = 'GHZ'
 MODEL_TYPE = "HNN"         # "HNN" or "FNN"
 
 DATE = date.today()
