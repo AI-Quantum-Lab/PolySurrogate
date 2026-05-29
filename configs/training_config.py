@@ -18,7 +18,7 @@ TRAINING_CONFIG = {
     # Model configuration
     # -------------------------------------------------------------------------
     "MODEL_NAME": "HNN",      # "FNN" or "HNN"
-    "HIDDEN_DIM": 20_000,
+    "HIDDEN_DIM": 45000,
 
     # -------------------------------------------------------------------------
     # Data configuration
@@ -35,7 +35,7 @@ TRAINING_CONFIG = {
     # -------------------------------------------------------------------------
     # True  -> normalize prediction and target before MAE/fidelity metrics
     # False -> train on raw/unnormalized amplitudes
-    "NORMALIZE_MODEL_OUTPUT": True,
+    "NORMALIZE_MODEL_OUTPUT": False,
 
     # -------------------------------------------------------------------------
     # Dataset split
@@ -71,6 +71,6 @@ TRAINING_CONFIG = {
     # Output configuration
     # -------------------------------------------------------------------------
     "ROOT_FOLDER": "./Models_26_05_26",
-    "RUN_NAME": "HNN_10_normMAE_5M_4",
-    "LOSS_NAME": "normalized_mae",
+    "RUN_NAME": "HNN_10_normMAE_5M_8",
+    "LOSS_NAME": "mae",
 }

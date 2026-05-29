@@ -1,44 +1,25 @@
-# Python
-__pycache__/
-*.py[cod]
-.ipynb_checkpoints/
-
-# Environments
-.env/
-.venv/
-env/
-venv/
-env_jax/
-
-# Data - DO NOT PUSH
+# Local/generated data
 data/
 *.npz
 *.npy
-*.h5
-*.hdf5
-*.csv
 
-# Models / checkpoints - DO NOT PUSH
+# Trained models and checkpoints
 Models_*/
-checkpoints/
-params_snapshots/
-*.msgpack
+*.pkl
+*.pickle
 *.ckpt
-checkpoint_*
+*.flax
+*.msgpack
 
-# Generated optimisation/results - DO NOT PUSH
-optimiser_notebook_results/
-results/
-outputs/
-
-# Logs - DO NOT PUSH
+# Local logs
 *.log
-run_log.txt
 check_run.log
-test_vectors_log.txt
 
-# Editor / OS
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
+# Python cache
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Streaming training scripts not included in public/repo version
+model_training_streaming.py
+model_training_streaming_utils.py
