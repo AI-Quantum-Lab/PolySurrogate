@@ -35,7 +35,6 @@ class HNN(nn.Module):
         x = nn.Dense(self.hidden_dims, use_bias=True)(x)
 
         # For even node counts, nodes / 2 is integer-valued.
-        x = x / (np.std(x, axis=-1, keepdims=True) + 1e-6)
         phi = x ** (self.nodes / 2)
 
         y_amp = nn.Dense(self.out_dims, use_bias=True)(phi)
