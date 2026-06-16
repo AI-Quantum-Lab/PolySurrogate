@@ -16,9 +16,11 @@ The pipeline has three stages:
 
 ## Installation on Windows / Linux
 
-Required packages, based on what the code actually imports: `jax`, `flax`, `optax`, `numpy`, `matplotlib`, and `pytheusQ`. `jupyter`/`ipykernel` are only needed for the notebook.
+Required packages are listed in `requirements.txt` (`jax`, `flax`, `optax`, `numpy`, `matplotlib`, `pytheusQ`). `jupyter`/`ipykernel` are only needed for the notebook and are not in `requirements.txt`.
 
 > **Install `pytheusQ`, not `pytheus`.** PyPI's `pytheus` is an unrelated Prometheus metrics client. `pytheusQ` is the distribution that installs the actual `pytheus` module this code imports (`pytheus.theseus`).
+
+> **Windows note:** installing `flax` pulls in `orbax-checkpoint`, which can fail on native Windows with `WinError 206: The filename or extension is too long`, even in a fresh virtual environment with a short path. This is a Windows path-length limitation, not a bug in this repository — see [Troubleshooting](#troubleshooting) before installing. **Native Windows support for the full training workflow is unverified and partial until this is resolved.** WSL2, native Linux, or an HPC/cluster environment is recommended for running the full pipeline (data generation, training, and optimisation).
 
 ### Linux / macOS
 
@@ -26,7 +28,7 @@ Required packages, based on what the code actually imports: `jax`, `flax`, `opta
 cd /path/to/surrogate_model_clean
 python3 -m venv .venv
 source .venv/bin/activate
-pip install numpy matplotlib jax flax optax pytheusQ
+pip install -r requirements.txt
 pip install jupyter ipykernel   # only if you will use the notebook
 export PYTHONPATH="$PWD/src:$PWD/configs:$PYTHONPATH"
 ```
@@ -37,7 +39,7 @@ export PYTHONPATH="$PWD/src:$PWD/configs:$PYTHONPATH"
 cd C:\path\to\surrogate_model_clean
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-pip install numpy matplotlib jax flax optax pytheusQ
+pip install -r requirements.txt
 pip install jupyter ipykernel   # only if you will use the notebook
 $env:PYTHONPATH = "$PWD\src;$PWD\configs;$env:PYTHONPATH"
 ```
@@ -465,6 +467,13 @@ optimiser_notebook_results/GHZ_4_quick_test/
 
 **`ModuleNotFoundError: No module named 'pytheus'`**
 Run `pip install pytheusQ`, not `pip install pytheus` (the latter is an unrelated Prometheus metrics package).
+
+**`[WinError 206] The filename or extension is too long`** (native Windows only)
+- **Cause:** Installing `flax` pulls in `orbax-checkpoint`, whose package contents include deeply nested file paths that exceed Windows' default 260-character path-length limit. This is a Windows/packaging limitation, not a bug in this repository's code.
+- **Recommended solution:** Use WSL2, native Linux, or an HPC/cluster environment for the full training workflow. This is currently the most reliable path and the one this project's workflow has actually been verified on.
+- **Alternative:** If you have administrator rights, enable Windows Long Path support (`gpedit.msc` → Computer Configuration → Administrative Templates → System → Filesystem → "Enable Win32 long paths", or set the registry value `HKLM\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled = 1`), then retry the install in a new terminal.
+- **Note:** Using a shorter project or virtual-environment path by itself may not be sufficient to avoid this error.
+- **Status:** Native Windows is **partially supported** — installation of `flax`/`optax` and the full training/optimisation workflow are not confirmed to work on native Windows unless Long Path support is enabled and the workflow has been independently verified end to end.
 
 **`ModuleNotFoundError: No module named 'training_config'`** (or `data_config`/`optimiser_config`)
 `src/` and `configs/` are not on `PYTHONPATH` for this session — see [Installation](#installation-on-windows--linux).
