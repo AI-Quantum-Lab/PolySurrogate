@@ -14,52 +14,6 @@ The pipeline has three stages:
 
 ---
 
-## Repository structure
-
-```text
-surrogate_model_clean/
-├── configs/
-│   ├── __init__.py
-│   ├── data_config.py
-│   ├── training_config.py
-│   └── optimiser_config.py
-├── notebooks/
-│   └── workflow_data_training_optimisation_notebook.ipynb
-├── src/
-│   ├── __init__.py
-│   ├── data_generation.py
-│   ├── data_generation_utils.py
-│   ├── model_training.py
-│   ├── model_training_utils.py
-│   ├── models.py
-│   ├── optimiser.py
-│   ├── optimisation_utils.py
-│   └── target_states.py
-├── .gitignore
-└── README.md
-```
-
-| File | Purpose |
-|---|---|
-| `configs/data_config.py` | Settings for data generation. |
-| `configs/training_config.py` | Settings for surrogate model training. |
-| `configs/optimiser_config.py` | Settings for inverse-design optimisation. |
-| `src/data_generation.py` | Main data-generation script (`generate_dataset()`). |
-| `src/data_generation_utils.py` | PyTheus catalogue construction, amplitude computation, shard merging. |
-| `src/model_training.py` | Main training script (`train_surrogate_model()`). |
-| `src/model_training_utils.py` | Dataset loading/splitting, training/eval/test steps, checkpointing, plotting. |
-| `src/models.py` | Model architectures: `FNN`, `HNN`, and `create_model()`. |
-| `src/optimiser.py` | Main inverse-design script (`run_optimisation()`). |
-| `src/optimisation_utils.py` | Model loading, optimisation step, PyTheus verification, pruning, plotting. |
-| `src/target_states.py` | Target-state definitions: GHZ, W, linear-cluster, single, zero. |
-| `notebooks/workflow_data_training_optimisation_notebook.ipynb` | Interactive walkthrough of the full workflow. |
-
-Generated data, trained models, checkpoints, logs, and optimisation outputs are gitignored and should stay local.
-
-None of the scripts accept command-line arguments. Every script reads its settings from the matching file in `configs/` at import time. To change a setting, edit the config file (or, in a notebook, edit the imported config dict before reloading the module).
-
----
-
 ## Installation on Windows / Linux
 
 The required Python packages, based on what the code actually imports, are:
@@ -110,6 +64,66 @@ $env:PYTHONPATH = "$PWD\src;$PWD\configs;$env:PYTHONPATH"
 ```
 
 For GPU use, install the JAX build that matches your CUDA version by following JAX's own installation instructions for your platform. The code runs on CPU as well; JAX will fall back to `CpuDevice` if no usable GPU is found.
+
+---
+
+## Table of contents
+
+- [Repository structure](#repository-structure)
+- [Minimal smoke test](#minimal-smoke-test)
+- [Data generation](#data-generation)
+- [Model training](#model-training)
+- [Inverse design optimisation](#inverse-design-optimisation)
+- [Notebook workflow](#notebook-workflow)
+- [Expected outputs](#expected-outputs)
+- [Troubleshooting](#troubleshooting)
+- [Citation / License](#citation--license)
+
+---
+
+## Repository structure
+
+```text
+surrogate_model_clean/
+├── configs/
+│   ├── __init__.py
+│   ├── data_config.py
+│   ├── training_config.py
+│   └── optimiser_config.py
+├── notebooks/
+│   └── workflow_data_training_optimisation_notebook.ipynb
+├── src/
+│   ├── __init__.py
+│   ├── data_generation.py
+│   ├── data_generation_utils.py
+│   ├── model_training.py
+│   ├── model_training_utils.py
+│   ├── models.py
+│   ├── optimiser.py
+│   ├── optimisation_utils.py
+│   └── target_states.py
+├── .gitignore
+└── README.md
+```
+
+| File | Purpose |
+|---|---|
+| `configs/data_config.py` | Settings for data generation. |
+| `configs/training_config.py` | Settings for surrogate model training. |
+| `configs/optimiser_config.py` | Settings for inverse-design optimisation. |
+| `src/data_generation.py` | Main data-generation script (`generate_dataset()`). |
+| `src/data_generation_utils.py` | PyTheus catalogue construction, amplitude computation, shard merging. |
+| `src/model_training.py` | Main training script (`train_surrogate_model()`). |
+| `src/model_training_utils.py` | Dataset loading/splitting, training/eval/test steps, checkpointing, plotting. |
+| `src/models.py` | Model architectures: `FNN`, `HNN`, and `create_model()`. |
+| `src/optimiser.py` | Main inverse-design script (`run_optimisation()`). |
+| `src/optimisation_utils.py` | Model loading, optimisation step, PyTheus verification, pruning, plotting. |
+| `src/target_states.py` | Target-state definitions: GHZ, W, linear-cluster, single, zero. |
+| `notebooks/workflow_data_training_optimisation_notebook.ipynb` | Interactive walkthrough of the full workflow. |
+
+Generated data, trained models, checkpoints, logs, and optimisation outputs are gitignored and should stay local.
+
+None of the scripts accept command-line arguments. Every script reads its settings from the matching file in `configs/` at import time. To change a setting, edit the config file (or, in a notebook, edit the imported config dict before reloading the module).
 
 ---
 
