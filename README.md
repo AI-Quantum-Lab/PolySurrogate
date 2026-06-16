@@ -1,206 +1,198 @@
 # Surrogate Model Clean
 
-This repository contains a clean workflow for surrogate-model-based photonic quantum-state design.
-
-The code supports three main stages:
-
-1. **Data generation**: generate random dense graph weights and their corresponding quantum-state amplitude vectors.
-2. **Model training**: train a surrogate neural network to learn the graph-to-state map.
-3. **Inverse optimisation**: use a trained surrogate model to optimise graph weights toward a target quantum state, followed by PyTheus-style verification and pruning.
-
-The main intended use is:
+A JAX/Flax pipeline for photonic quantum-state design via a learned surrogate model.
 
 ```text
 graph / edge weights  ->  surrogate model  ->  predicted amplitude vector
 ```
 
-The trained surrogate can then be used inside an inverse-design loop to search for graph configurations that generate target states such as GHZ, W, or linear-cluster states.
+The pipeline has three stages:
+
+1. **Data generation** — generate random dense graph weights and the corresponding quantum-state amplitude vectors using a PyTheus perfect-matching catalogue.
+2. **Model training** — train a surrogate neural network (`FNN` or `HNN`) to learn the graph-weights -> amplitudes map.
+3. **Inverse design optimisation** — use the trained surrogate to optimise graph weights toward a target state (GHZ, W, linear-cluster, ...), verified against PyTheus and pruned to a sparse graph.
 
 ---
 
-## Repository layout
+## Repository structure
 
 ```text
 surrogate_model_clean/
 ├── configs/
+│   ├── __init__.py
 │   ├── data_config.py
 │   ├── training_config.py
 │   └── optimiser_config.py
 ├── notebooks/
 │   └── workflow_data_training_optimisation_notebook.ipynb
 ├── src/
+│   ├── __init__.py
 │   ├── data_generation.py
 │   ├── data_generation_utils.py
 │   ├── model_training.py
 │   ├── model_training_utils.py
 │   ├── models.py
-│   ├── optimisation_utils.py
 │   ├── optimiser.py
+│   ├── optimisation_utils.py
 │   └── target_states.py
 ├── .gitignore
 └── README.md
 ```
 
-Generated data, trained models, checkpoints, logs, and optimisation outputs should normally stay local and should not be committed to GitHub.
-
----
-
-## Main files
-
 | File | Purpose |
 |---|---|
 | `configs/data_config.py` | Settings for data generation. |
 | `configs/training_config.py` | Settings for surrogate model training. |
-| `configs/optimiser_config.py` | Settings for inverse optimisation. |
-| `src/data_generation.py` | Main data-generation script. |
-| `src/data_generation_utils.py` | Helper functions for PyTheus catalogue construction, amplitude computation, shard merging, and graph generation. |
-| `src/model_training.py` | Main training script. |
-| `src/model_training_utils.py` | Training utilities: dataset loading, training steps, validation, testing, checkpointing, plotting, and logging. |
-| `src/models.py` | Defines the model architectures: `FNN` and `HNN`. |
-| `src/optimiser.py` | Main inverse-optimisation script. |
-| `src/optimisation_utils.py` | Optimisation helpers, target-state construction, PyTheus verification, pruning, plotting, and saving. |
-| `src/target_states.py` | Target-state definitions such as GHZ, W, and linear-cluster states. |
-| `notebooks/workflow_data_training_optimisation_notebook.ipynb` | Jupyter notebook for running the full workflow interactively. |
+| `configs/optimiser_config.py` | Settings for inverse-design optimisation. |
+| `src/data_generation.py` | Main data-generation script (`generate_dataset()`). |
+| `src/data_generation_utils.py` | PyTheus catalogue construction, amplitude computation, shard merging. |
+| `src/model_training.py` | Main training script (`train_surrogate_model()`). |
+| `src/model_training_utils.py` | Dataset loading/splitting, training/eval/test steps, checkpointing, plotting. |
+| `src/models.py` | Model architectures: `FNN`, `HNN`, and `create_model()`. |
+| `src/optimiser.py` | Main inverse-design script (`run_optimisation()`). |
+| `src/optimisation_utils.py` | Model loading, optimisation step, PyTheus verification, pruning, plotting. |
+| `src/target_states.py` | Target-state definitions: GHZ, W, linear-cluster, single, zero. |
+| `notebooks/workflow_data_training_optimisation_notebook.ipynb` | Interactive walkthrough of the full workflow. |
+
+Generated data, trained models, checkpoints, logs, and optimisation outputs are gitignored and should stay local.
+
+None of the scripts accept command-line arguments. Every script reads its settings from the matching file in `configs/` at import time. To change a setting, edit the config file (or, in a notebook, edit the imported config dict before reloading the module).
 
 ---
 
-## Installation
+## Installation on Windows / Linux
 
-Create or activate a Python environment with JAX, Flax, Optax, NumPy, and plotting tools.
-
-Example:
-
-```bash
-conda activate env_jax
-```
-
-Install the required packages. If the repository does not yet include a `requirements.txt`, install the main dependencies manually:
-
-```bash
-pip install numpy scipy matplotlib tqdm jupyter ipykernel flax optax
-```
-
-Install JAX according to your machine or cluster setup. For GPU usage, use the JAX version matching the CUDA version available on the cluster.
-
-For example, check the official JAX installation command for your CUDA version before installing GPU-enabled JAX.
-
----
-
-## Important import setup
-
-The repository separates source files and config files:
+The required Python packages, based on what the code actually imports, are:
 
 ```text
-src/
-configs/
+jax
+flax
+optax
+numpy
+matplotlib
+pytheus
 ```
 
-The scripts import config modules directly, for example:
+`jupyter` and `ipykernel` are only needed if you plan to use the notebook.
 
-```python
-from training_config import TRAINING_CONFIG
-```
+**PyTheus is not on the standard install line below** — there is no PyPI package name confirmed for this repository's PyTheus dependency. Install it however it is distributed in your environment (e.g. from its own source repository or an internal package index) before continuing; `from pytheus import theseus as th` must succeed.
 
-Therefore, when running from the terminal, add both folders to `PYTHONPATH`:
+### Linux / macOS
 
 ```bash
 cd /path/to/surrogate_model_clean
+python3 -m venv .venv
+source .venv/bin/activate
+pip install numpy matplotlib jax flax optax
+pip install jupyter ipykernel   # only if you will use the notebook
+# install pytheus separately - see note above
+```
+
+Add `src/` and `configs/` to `PYTHONPATH` for every terminal session you run scripts from:
+
+```bash
 export PYTHONPATH="$PWD/src:$PWD/configs:$PYTHONPATH"
 ```
 
-In Jupyter notebooks, add the paths manually:
+### Windows (PowerShell)
 
-```python
-from pathlib import Path
-import sys
-
-REPO_DIR = Path("/path/to/surrogate_model_clean")
-SRC_DIR = REPO_DIR / "src"
-CONFIG_DIR = REPO_DIR / "configs"
-
-for p in [SRC_DIR, CONFIG_DIR]:
-    p = str(p)
-    if p not in sys.path:
-        sys.path.insert(0, p)
+```powershell
+cd C:\path\to\surrogate_model_clean
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install numpy matplotlib jax flax optax
+pip install jupyter ipykernel   # only if you will use the notebook
+# install pytheus separately - see note above
 ```
+
+Add `src\` and `configs\` to `PYTHONPATH` for the current PowerShell session:
+
+```powershell
+$env:PYTHONPATH = "$PWD\src;$PWD\configs;$env:PYTHONPATH"
+```
+
+For GPU use, install the JAX build that matches your CUDA version by following JAX's own installation instructions for your platform. The code runs on CPU as well; JAX will fall back to `CpuDevice` if no usable GPU is found.
 
 ---
 
-# 1. Data generation
+## Minimal smoke test
 
-Data generation creates random dense graph-weight vectors and computes the corresponding amplitude vectors using the perfect-matching catalogue.
+`configs/data_config.py` already ships with small smoke-test values (`VERTICES=4`, `N_SAMPLES=1000`, `OUT_DIR='data/smoke_test'`), so data generation works as committed.
 
-The generated files are saved as `.npz` shards.
+`configs/training_config.py` and `configs/optimiser_config.py` ship with production-scale values and absolute paths from the original author's machine (e.g. `NODES=10`, `HIDDEN_DIM=45000`, and `DATA_PATH`/`model_path`/`conditioned_data_path` under `/home/...`). **These two config files must be edited manually before a smoke test will run.**
 
-Each shard contains:
+1. Run data generation with the existing defaults:
 
-```text
-weights  # input graph/edge-weight vectors
-amps     # output amplitude vectors
+```bash
+python src/data_generation.py
 ```
 
-For an `n`-node system with local dimension 2, the default dimensions are:
+2. Merge the generated shards into one file:
+
+```bash
+python -c "from pathlib import Path; from data_generation_utils import merge_shards_to_npz; print(merge_shards_to_npz(Path('data/smoke_test'), 'dataset_merged.npz'))"
+```
+
+3. Edit `configs/training_config.py` and set `TRAINING_CONFIG` to small test values, for example:
 
 ```python
-input_dim = 2 * n * (n - 1)
-out_dim = 2 ** n
+"NODES": 4,
+"MODEL_NAME": "HNN",
+"HIDDEN_DIM": 400,
+"DATA_PATH": "data/smoke_test/dataset_merged.npz",
+"DATA_SIZE": None,
+"NUM_EPOCHS": 20,
+"PATIENCE": 10,
+"BATCH_SIZE": 100,
+"LR_DECAY_UNTIL_EPOCH": 20,
+"RESUME_FULL_STATE": False,
+"ROOT_FOLDER": "./Models_smoke_test",
+"RUN_NAME": "HNN_4_smoke_test",
 ```
 
-Example:
+Then run:
 
-```python
-n = 4
-input_dim = 2 * 4 * (4 - 1)  # 24
-out_dim = 2 ** 4              # 16
+```bash
+python src/model_training.py
 ```
+
+4. Edit `configs/optimiser_config.py` and set `NPHOTONS = 4`, `MODEL_TYPE = "HNN"`, and inside `OPTIMISER_CONFIG` set `"architecture": 400`, `"generate_data": True` (so no `conditioned_data_path` is needed), and `"model_path"` to the `params.msgpack` produced in step 3 (`./Models_smoke_test/run_HNN_4_smoke_test/params.msgpack`). Then run:
+
+```bash
+python src/optimiser.py
+```
+
+This mirrors the small-scale run already exercised in the notebook (see [Notebook workflow](#notebook-workflow)) and is the fastest way to confirm the environment is set up correctly.
 
 ---
 
-## Data-generation config
+## Data generation
 
-Edit:
-
-```text
-configs/data_config.py
-```
-
-Important settings:
-
-```python
-VERTICES = 4
-DIMENSIONS = 2
-
-N_SAMPLES = 1000
-BATCH_SIZE = 100
-SEED = 0
-
-SAVE_TO_FILE = True
-OUT_DIR = "data/smoke_test"
-SHARD_SIZE = 1000
-
-NORMED_DATA = True
-```
-
-Meaning:
+Edit `configs/data_config.py`:
 
 | Setting | Meaning |
 |---|---|
 | `VERTICES` | Number of graph vertices / photons / nodes. |
 | `DIMENSIONS` | Local dimension. Usually `2`. |
 | `N_SAMPLES` | Number of random graph samples to generate. |
-| `BATCH_SIZE` | Number of samples processed per JAX batch. |
+| `BATCH_SIZE` | Samples processed per JAX batch. |
 | `SEED` | Random seed. |
 | `SAVE_TO_FILE` | If `True`, save `.npz` shards to disk. |
 | `OUT_DIR` | Output folder for generated shards. |
-| `SHARD_SIZE` | Number of samples per saved shard. |
-| `NORMED_DATA` | If `True`, save normalised amplitudes. If `False`, save raw unnormalised amplitudes. |
+| `SHARD_SIZE` | Samples per saved shard. |
+| `NORMED_DATA` | If `True`, save normalised amplitudes; if `False`, raw amplitudes. |
 
----
+Run from the repository root, with `PYTHONPATH` set as above:
 
-## Run data generation in Jupyter
+```bash
+python src/data_generation.py
+```
+
+This calls `generate_dataset()` with the values from `data_config.py` and writes shards named `data_00000.npz`, `data_00001.npz`, ... plus `metadata.json` and a `logs/` folder inside `OUT_DIR`.
+
+To call `generate_dataset()` directly (e.g. from a notebook or REPL) with different arguments instead of editing the config file:
 
 ```python
-from pathlib import Path
 from data_generation import generate_dataset
 
 out_dir = generate_dataset(
@@ -214,184 +206,51 @@ out_dir = generate_dataset(
     shard_size=500,
     normed_data=False,
 )
-
-out_dir = Path(out_dir)
-print(out_dir)
 ```
 
-This produces files such as:
-
-```text
-data/node4_test/
-├── data_00000.npz
-├── data_00001.npz
-├── metadata.json
-└── generation.log
-```
-
----
-
-## Merge data shards
-
-Training usually expects one merged dataset file, for example:
-
-```text
-dataset_merged.npz
-```
-
-Merge shards in Jupyter:
-
-```python
-from pathlib import Path
-from data_generation_utils import merge_shards_to_npz
-
-merged_path = merge_shards_to_npz(
-    out_dir=Path("data/node4_test"),
-    output_name="dataset_merged.npz",
-)
-
-print(merged_path)
-```
-
-The merged file contains:
-
-```text
-weights
-amps
-```
-
-Check the dataset:
-
-```python
-import numpy as np
-
-with np.load(merged_path, mmap_mode="r") as data:
-    print(data.files)
-    print("weights:", data["weights"].shape)
-    print("amps:", data["amps"].shape)
-```
-
----
-
-## Run data generation from terminal
-
-From the repository root:
+Training expects one merged file. Merge the shards with:
 
 ```bash
-cd /path/to/surrogate_model_clean
-export PYTHONPATH="$PWD/src:$PWD/configs:$PYTHONPATH"
-python src/data_generation.py
+python -c "from pathlib import Path; from data_generation_utils import merge_shards_to_npz; print(merge_shards_to_npz(Path('data/node4_test'), 'dataset_merged.npz'))"
 ```
 
-Then merge shards:
+This produces `dataset_merged.npz` containing the keys `weights` (input graph/edge weights) and `amps` (output amplitude vectors).
 
-```bash
-python - <<'PY'
-from pathlib import Path
-from data_generation_utils import merge_shards_to_npz
-
-out = merge_shards_to_npz(
-    out_dir=Path("data/smoke_test"),
-    output_name="dataset_merged.npz",
-)
-print(out)
-PY
-```
-
-Change `data/smoke_test` to the `OUT_DIR` used in `configs/data_config.py`.
-
----
-
-# 2. Model training
-
-Training learns the map:
-
-```text
-weights -> amps
-```
-
-The training script supports two model types:
-
-| Model | Description | `HIDDEN_DIM` format |
-|---|---|---|
-| `HNN` | Polynomial/HNN-style model used for graph-to-state mapping. | Integer, e.g. `15000`. |
-| `FNN` | Fully connected feed-forward neural network. | Tuple/list, e.g. `(2000, 2000, 2000)`. |
-
----
-
-## Training config
-
-Edit:
-
-```text
-configs/training_config.py
-```
-
-The main dictionary is:
+For an `n`-node, local-dimension-2 system:
 
 ```python
-TRAINING_CONFIG = {
-    "NODES": 10,
-    "DIMENSIONS": 2,
-    "DATE": "26_05_26",
-
-    "MODEL_NAME": "HNN",
-    "HIDDEN_DIM": 45000,
-
-    "DATA_PATH": "data/node10_test/dataset_merged.npz",
-    "DATA_SIZE": 5_000_000,
-
-    "NORMALIZE_MODEL_OUTPUT": False,
-
-    "TRAIN_SPLIT": 0.8,
-    "VAL_SPLIT": 0.1,
-    "TEST_SPLIT": 0.1,
-
-    "LEARNING_RATE": 1e-3,
-    "LR_AFTER_DECAY": 1e-5,
-    "LR_DECAY_UNTIL_EPOCH": 5000,
-
-    "BATCH_SIZE": 5000,
-    "NUM_EPOCHS": 20000,
-    "PATIENCE": 2000,
-    "TOLERANCE": 1e-7,
-    "INIT_KEY": 159,
-
-    "RESUME_FULL_STATE": False,
-    "CKPT_DIR_RESTORE": "",
-
-    "ROOT_FOLDER": "./Models_26_05_26",
-    "RUN_NAME": "HNN_10_normMAE_5M_8",
-    "LOSS_NAME": "mae",
-}
+input_dim = 2 * n * (n - 1)
+out_dim = 2 ** n
 ```
 
-Important settings:
+---
+
+## Model training
+
+Edit `configs/training_config.py` (`TRAINING_CONFIG` dict):
 
 | Setting | Meaning |
 |---|---|
-| `NODES` | Number of nodes/photons used in the dataset. Must match the dataset. |
+| `NODES` | Number of nodes/photons in the dataset. Must match the dataset. |
 | `MODEL_NAME` | `"HNN"` or `"FNN"`. |
-| `HIDDEN_DIM` | Integer for HNN; tuple/list for FNN. |
-| `DATA_PATH` | Path to `dataset_merged.npz`. |
-| `DATA_SIZE` | Number of samples to use. Set `None` to use the full dataset. |
-| `NORMALIZE_MODEL_OUTPUT` | If `True`, normalise predictions/targets before computing some losses/metrics. Keep this consistent with the dataset. |
-| `TRAIN_SPLIT`, `VAL_SPLIT`, `TEST_SPLIT` | Dataset split fractions. |
-| `LEARNING_RATE` | Initial learning rate. |
-| `LR_AFTER_DECAY` | Final learning rate after decay. |
-| `LR_DECAY_UNTIL_EPOCH` | Epoch until which learning rate is decayed. |
-| `BATCH_SIZE` | Training batch size. |
-| `NUM_EPOCHS` | Maximum number of epochs. |
-| `PATIENCE` | Early-stopping patience. |
-| `ROOT_FOLDER` | Folder where trained model outputs are saved. |
-| `RUN_NAME` | Name of the training run. |
-| `LOSS_NAME` | Training objective, for example `"mae"`. |
+| `HIDDEN_DIM` | Integer for `HNN`; tuple/list for `FNN`, e.g. `(2000, 2000, 2000)`. |
+| `DATA_PATH` | Path to the merged `.npz` dataset. **Must be edited from the shipped absolute path.** |
+| `DATA_SIZE` | Number of samples to use; `None` uses the full dataset. |
+| `NORMALIZE_MODEL_OUTPUT` | Must match `NORMED_DATA` used during data generation. |
+| `TRAIN_SPLIT`, `VAL_SPLIT`, `TEST_SPLIT` | Dataset split fractions (must sum to 1.0). |
+| `LEARNING_RATE`, `LR_AFTER_DECAY`, `LR_DECAY_UNTIL_EPOCH` | Cosine learning-rate schedule. |
+| `BATCH_SIZE`, `NUM_EPOCHS`, `PATIENCE`, `TOLERANCE`, `INIT_KEY` | Training loop settings. |
+| `RESUME_FULL_STATE`, `CKPT_DIR_RESTORE` | Set `RESUME_FULL_STATE=True` and point `CKPT_DIR_RESTORE` at a checkpoint directory to resume training. |
+| `ROOT_FOLDER`, `RUN_NAME` | Where outputs are written: `<ROOT_FOLDER>/run_<RUN_NAME>/`. |
+| `LOSS_NAME` | Label used in plots/logs (training itself always uses MAE). |
 
----
+Run:
 
-## Run training in Jupyter
+```bash
+python src/model_training.py
+```
 
-Important: `src/model_training.py` reads `TRAINING_CONFIG` when the module is imported. Therefore, if you change `TRAINING_CONFIG` inside a notebook, reload the module before training.
+Because `model_training.py` reads `TRAINING_CONFIG` at import time, changing it inside a running Python/notebook session requires reloading the module:
 
 ```python
 import importlib
@@ -399,168 +258,68 @@ import training_config
 
 training_config.TRAINING_CONFIG.update({
     "NODES": 4,
-    "DIMENSIONS": 2,
-
     "MODEL_NAME": "HNN",
     "HIDDEN_DIM": 400,
-
     "DATA_PATH": "data/node4_test/dataset_merged.npz",
     "DATA_SIZE": None,
-
-    "NORMALIZE_MODEL_OUTPUT": False,
-
-    "TRAIN_SPLIT": 0.8,
-    "VAL_SPLIT": 0.1,
-    "TEST_SPLIT": 0.1,
-
-    "LEARNING_RATE": 1e-3,
-    "LR_AFTER_DECAY": 1e-5,
-    "LR_DECAY_UNTIL_EPOCH": 100,
-
-    "BATCH_SIZE": 100,
     "NUM_EPOCHS": 20,
-    "PATIENCE": 10,
-    "TOLERANCE": 1e-7,
-    "INIT_KEY": 159,
-
-    "RESUME_FULL_STATE": False,
-    "CKPT_DIR_RESTORE": "",
-
     "ROOT_FOLDER": "./Models_notebook_test",
     "RUN_NAME": "HNN_4_quick_test",
-    "LOSS_NAME": "mae",
 })
 
 import model_training
 importlib.reload(model_training)
 
 run_dir = model_training.train_surrogate_model()
-print(run_dir)
 ```
 
-The trained parameter file is normally saved as:
-
-```text
-<ROOT_FOLDER>/<RUN_NAME>/params.msgpack
-```
-
-For example:
-
-```python
-from pathlib import Path
-params_path = Path(run_dir) / "params.msgpack"
-print(params_path, params_path.exists())
-```
+The trained parameters are saved as `<run_dir>/params.msgpack`, used as `model_path` in the optimiser config.
 
 ---
 
-## Run training from terminal
+## Inverse design optimisation
 
-1. Edit `configs/training_config.py`.
-2. Make sure `DATA_PATH` points to the merged dataset.
-3. Run:
-
-```bash
-cd /path/to/surrogate_model_clean
-export PYTHONPATH="$PWD/src:$PWD/configs:$PYTHONPATH"
-python src/model_training.py
-```
-
-Training outputs include files such as:
-
-```text
-Models_*/<RUN_NAME>/
-├── params.msgpack
-├── model_info.json
-├── test_metrics.npz
-├── log.txt
-├── plots/
-│   ├── training_curves.png
-│   └── test_fidelity_curve.png
-└── checkpoints/
-```
-
-The exact folder names depend on `ROOT_FOLDER` and `RUN_NAME`.
-
----
-
-# 3. Inverse optimisation
-
-The optimiser uses a trained surrogate model to optimise input graph weights toward a target state.
-
-Conceptually:
-
-```text
-start graph weights
-      ↓
-surrogate prediction
-      ↓
-fidelity with target state
-      ↓
-gradient-based update
-      ↓
-pruning + PyTheus verification
-```
-
----
-
-## Optimiser config
-
-Edit:
-
-```text
-configs/optimiser_config.py
-```
-
-Important settings:
+Edit `configs/optimiser_config.py` (`NPHOTONS`, `TARGET_NAME`, `MODEL_TYPE`, and the `OPTIMISER_CONFIG` dict):
 
 | Setting | Meaning |
 |---|---|
 | `n` | Number of nodes/photons. Must match the trained model. |
-| `dimensions` | Local dimension, usually `2`. |
-| `target_name` | Target state, e.g. `"GHZ"`, `"W"`, or `"LINEAR_CLUSTER"`. |
-| `model_type` | `"HNN"` or `"FNN"`. Must match trained model. |
-| `generate_data` | If `True`, generate fresh starting samples. If `False`, load starting samples from `conditioned_data_path`. |
-| `conditioned_data_path` | Path to initial samples when `generate_data=False`. |
-| `data_samples` | Number of starting samples when generating fresh data. |
-| `low_fidelity_threshold` | Initial-sample filtering threshold. |
-| `architecture` | HNN integer hidden dimension or FNN tuple/list. Must match trained model. |
-| `model_path` | Path to trained `params.msgpack`. |
-| `normalize_model_output` | Must match the model/data training choice. |
-| `input_dim` | Usually `2 * n * (n - 1)`. |
-| `out_dim` | Usually `2 ** n`. |
-| `lambda_l1` | L1 sparsity penalty. Objective is approximately `1 - fidelity + lambda_l1 * L1`. |
-| `num_steps` | Maximum optimiser steps. |
-| `learning_rate` | Initial optimiser learning rate. |
-| `min_learning_rate` | Minimum learning rate. |
-| `clip_min`, `clip_max` | Bounds for graph weights. Usually `[-1, 1]`. |
-| `verify_every` | How often to run verification. |
-| `store_step_vectors` | If `True`, stores detailed step vectors. Can create very large JSON files. Use `False` for large runs. |
-| `prune_thresholds` | Edge-weight thresholds tested during pruning. |
-| `results_root` | Output root folder for optimisation results. |
-| `folder_name` | Name of this optimisation run. |
+| `target_name` | `"GHZ"`, `"W"`, `"LINEAR_CLUSTER"` (also `"CLUSTER"`/`"LINEAR"`), `"SINGLE"`, or `"ZERO"`. `"SINGLE"` requires `2**n > 10` (i.e. `n >= 4`). |
+| `model_type` | `"HNN"` or `"FNN"`. Must match the trained model. |
+| `generate_data` | `True` generates fresh starting samples via `data_generation.generate_dataset()`; `False` loads samples from `conditioned_data_path`. |
+| `conditioned_data_path` | Path to an existing `.npz` with `weights`/`amps` keys, used when `generate_data=False`. **Must be edited from the shipped absolute path if you use this mode.** |
+| `architecture` | `HNN` integer hidden dim, or `FNN` tuple/list. Must match the trained model. |
+| `model_path` | Path to the trained `params.msgpack`. **Must be edited from the shipped absolute path.** |
+| `normalize_model_output` | Must match the training/data normalisation choice. |
+| `input_dim`, `out_dim` | `2 * n * (n - 1)` and `2 ** n`. |
+| `lambda_l1` | L1 sparsity weight. Objective is `loss = 1 - fidelity + lambda_l1 * sum(abs(x))`. |
+| `num_steps`, `early_stop_nn_fid` | Optimisation step budget and early-stop fidelity. |
+| `learning_rate`, `min_learning_rate`, `lr_decay_steps`, `lr_exponent` | Cosine-decay Adam schedule for the graph weights. |
+| `clip_min`, `clip_max` | Bounds applied to graph weights after each update. |
+| `print_every`, `verify_every` | Logging/PyTheus-verification frequency. |
+| `store_step_vectors` | `True` stores every gradient/update vector — large JSON files for long runs; use `False` for production runs. |
+| `prune_fid_tolerance`, `prune_thresholds` | Progressive-threshold pruning settings. |
+| `results_root`, `folder_name` | Output location: `<results_root>/<folder_name>/`. |
 
----
+Run:
 
-## Run optimisation in Jupyter
+```bash
+python src/optimiser.py
+```
 
-Unlike training, the optimiser is already easy to call from a notebook because `run_optimisation()` accepts a config dictionary.
+`run_optimisation()` also accepts a config dict directly, which is the pattern used in the notebook:
 
 ```python
 from optimiser import run_optimisation
 
 CFG_OPT = {
-    "description": "notebook inverse optimisation test",
-
     "n": 4,
     "dimensions": 2,
     "target_name": "GHZ",
     "model_type": "HNN",
-
     "generate_data": True,
     "conditioned_data_path": "",
     "max_initial_samples": None,
-
     "data_samples": 5,
     "data_batch_size": 5,
     "data_seed": 4,
@@ -570,412 +329,127 @@ CFG_OPT = {
     "normed_data": True,
     "generation_gpu_batch_size": 5,
     "data_shard_size": 5,
-
     "architecture": 400,
-    "model_path": "Models_notebook_test/HNN_4_quick_test/params.msgpack",
+    "model_path": "Models_notebook_test/run_HNN_4_quick_test/params.msgpack",
     "normalize_model_output": False,
-
-    "input_dim": 2 * 4 * (4 - 1),
-    "out_dim": 2 ** 4,
-
+    "input_dim": 24,
+    "out_dim": 16,
     "lambda_l1": 1e-3,
-
     "seed": 46,
     "num_steps": 20,
     "early_stop_nn_fid": 0.9999,
-
     "learning_rate": 1e-2,
     "min_learning_rate": 1e-6,
     "lr_decay_steps": 20,
     "lr_exponent": 1.0,
-
     "clip_min": -1.0,
     "clip_max": 1.0,
-
     "print_every": 1,
     "verify_every": 1,
-
     "store_step_vectors": False,
-
     "prune_fid_tolerance": 1e-4,
     "prune_thresholds": [1e-5, 1e-4, 1e-3, 1e-2, 1e-1],
-
     "results_root": "optimiser_notebook_results",
     "folder_name": "GHZ_4_quick_test",
-
-    "date": "notebook",
-    "k_value": 0,
-    "noise": 0,
-    "CPU_GPU": "GPU",
 }
 
 result_dir = run_optimisation(CFG_OPT)
-print(result_dir)
 ```
 
 ---
 
-## Run optimisation from terminal
+## Notebook workflow
 
-1. Edit `configs/optimiser_config.py`.
-2. Make sure the following match the trained model:
+`notebooks/workflow_data_training_optimisation_notebook.ipynb` runs all three stages interactively and is the version of this workflow that has actually been executed end-to-end (its saved cell outputs show a full `NODES=4` run completing successfully on CPU).
+
+The notebook's first code cell sets:
 
 ```python
-"n"
-"model_type"
-"architecture"
-"model_path"
-"normalize_model_output"
-"input_dim"
-"out_dim"
+REPO_DIR = Path("/home/bo48god/projects/deep_dreaming/surrogate_model_clean_all_codes_with_config/surrogate_model_clean")
 ```
 
-3. Run:
+**This path must be edited to your own repository location before running the notebook.** The notebook then inserts `REPO_DIR/src` and `REPO_DIR/configs` into `sys.path`, generates data, merges shards, trains a model, and runs inverse optimisation, all with small `NODES=4` test values. After confirming the workflow runs, increase `NODES`, sample counts, epochs, and optimisation steps for a real run, and move final settings back into the `configs/*.py` files for terminal/cluster use.
 
-```bash
-cd /path/to/surrogate_model_clean
-export PYTHONPATH="$PWD/src:$PWD/configs:$PYTHONPATH"
-python src/optimiser.py
-```
+---
 
-Optimisation outputs usually include:
+## Expected outputs
+
+**Data generation** (`OUT_DIR`):
 
 ```text
-<results_root>/<folder_name>/
-├── optimisation_summary.json
+data/smoke_test/
+├── data_00000.npz
+├── data_00001.npz
+├── metadata.json
+├── dataset_merged.npz      # after merging
+└── logs/
+    └── data_generation_<timestamp>.log
+```
+
+**Model training** (`<ROOT_FOLDER>/run_<RUN_NAME>/`):
+
+```text
+Models_smoke_test/run_HNN_4_smoke_test/
+├── checkpoints/
+├── params_snapshots/
+├── plots/
+│   ├── training_curves.png
+│   └── test_fidelity_curve.png
+├── model_info.json
+├── params.msgpack
+├── run_log.txt
+└── test_metrics.npz
+```
+
+**Inverse optimisation** (`<results_root>/<folder_name>/`):
+
+```text
+optimiser_notebook_results/GHZ_4_quick_test/
 ├── best_graph_solution.json
+├── cfg.json
+├── optimisation_summary.json
 ├── zero_state_samples.json
-├── optimisation.log
-├── edge_fidelity_plot.png
-├── time_plots.png
-└── sample_*/
+├── log.txt
+├── edge_vs_fidelity.png
+├── time_per_sample.png
+├── cumulative_time.png
+└── sample_0/, sample_1/, ...
     ├── sample_info_file.json
-    ├── loss_fid_plot.png
-    └── gradient_plot.png
-```
-
-Exact filenames can vary depending on the utilities used inside `optimisation_utils.py`.
-
----
-
-# 4. Full workflow in Jupyter
-
-The recommended notebook is:
-
-```text
-notebooks/workflow_data_training_optimisation_notebook.ipynb
-```
-
-The notebook workflow is:
-
-```python
-# 1. Add paths
-REPO_DIR = Path("/path/to/surrogate_model_clean")
-sys.path.insert(0, str(REPO_DIR / "src"))
-sys.path.insert(0, str(REPO_DIR / "configs"))
-
-# 2. Generate data
-from data_generation import generate_dataset
-out_dir = generate_dataset(...)
-
-# 3. Merge shards
-from data_generation_utils import merge_shards_to_npz
-merged_path = merge_shards_to_npz(...)
-
-# 4. Train model
-import training_config
-training_config.TRAINING_CONFIG.update({...})
-
-import model_training
-import importlib
-importlib.reload(model_training)
-run_dir = model_training.train_surrogate_model()
-
-# 5. Run optimisation
-from optimiser import run_optimisation
-result_dir = run_optimisation(CFG_OPT)
-```
-
-This notebook is useful for:
-
-- testing the full workflow with small sample sizes,
-- debugging configs,
-- verifying data shapes,
-- checking that training produces `params.msgpack`,
-- checking that optimisation can load the trained model.
-
-For large production runs, use terminal or Slurm jobs instead of Jupyter.
-
----
-
-# 5. Full workflow from terminal
-
-Use this after editing the config files.
-
-```bash
-cd /path/to/surrogate_model_clean
-conda activate env_jax
-export PYTHONPATH="$PWD/src:$PWD/configs:$PYTHONPATH"
-```
-
-## Step 1: edit data config
-
-Edit:
-
-```text
-configs/data_config.py
-```
-
-Then run:
-
-```bash
-python src/data_generation.py
-```
-
-Merge shards:
-
-```bash
-python - <<'PY'
-from pathlib import Path
-from data_generation_utils import merge_shards_to_npz
-
-out = merge_shards_to_npz(
-    out_dir=Path("data/smoke_test"),
-    output_name="dataset_merged.npz",
-)
-print("Merged dataset:", out)
-PY
-```
-
-## Step 2: edit training config
-
-Edit:
-
-```text
-configs/training_config.py
-```
-
-Set:
-
-```python
-"DATA_PATH": "data/smoke_test/dataset_merged.npz"
-```
-
-Then run:
-
-```bash
-python src/model_training.py
-```
-
-After training, locate:
-
-```text
-<ROOT_FOLDER>/<RUN_NAME>/params.msgpack
-```
-
-## Step 3: edit optimiser config
-
-Edit:
-
-```text
-configs/optimiser_config.py
-```
-
-Set:
-
-```python
-"model_path": "<ROOT_FOLDER>/<RUN_NAME>/params.msgpack"
-```
-
-Then run:
-
-```bash
-python src/optimiser.py
+    ├── loss_fid_curve.png
+    └── gradient_norm.png
 ```
 
 ---
 
-# 6. Quick sanity checks
+## Troubleshooting
 
-## Check dataset shape
+**`ModuleNotFoundError: No module named 'pytheus'`**
+PyTheus is required by `data_generation_utils.py` and `optimisation_utils.py` but is not installed by the standard pip line in this README. Install it separately for your environment before running any stage.
 
-```python
-import numpy as np
+**`ModuleNotFoundError: No module named 'training_config'` (or `data_config'` / `optimiser_config'`)**
+`src/` and `configs/` are not on `PYTHONPATH`. Set it for the current session:
 
-DATA_PATH = "data/node4_test/dataset_merged.npz"
-
-with np.load(DATA_PATH, mmap_mode="r") as data:
-    print(data.files)
-    print("weights:", data["weights"].shape)
-    print("amps:", data["amps"].shape)
+```bash
+export PYTHONPATH="$PWD/src:$PWD/configs:$PYTHONPATH"     # Linux/macOS
+```
+```powershell
+$env:PYTHONPATH = "$PWD\src;$PWD\configs;$env:PYTHONPATH"  # Windows PowerShell
 ```
 
-## Check zero-output MAE baseline
+**Training or optimisation fails with a `FileNotFoundError` pointing at `/home/...`**
+The committed `configs/training_config.py` and `configs/optimiser_config.py` ship with absolute paths from the original author's machine (`DATA_PATH`, `CKPT_DIR_RESTORE`, `model_path`, `conditioned_data_path`, `results_root`). Edit these to local paths before running.
 
-This checks the MAE obtained if the model predicted an all-zero output vector:
+**`Jax plugin configuration error` / `cuInit failed` on startup**
+This means JAX tried to use a CUDA GPU plugin that doesn't match the available CUDA libraries. It is non-fatal — JAX falls back to `CpuDevice` and the scripts continue to run on CPU. To use a GPU, install the JAX build matching your machine's CUDA version.
 
-```python
-import numpy as np
+**`HNN`/`FNN` architecture mismatch between training and optimisation**
+`HIDDEN_DIM` in `configs/training_config.py` and `architecture` in `configs/optimiser_config.py` must use the same format and value: an integer for `HNN`, a tuple/list for `FNN`.
 
-DATA_PATH = "data/node10_test/dataset_merged.npz"
-
-with np.load(DATA_PATH, mmap_mode="r") as data:
-    Y = data["amps"]
-    mae_zero = np.mean(np.abs(Y))
-
-print("Zero-output MAE baseline:", mae_zero)
-```
-
-If the trained model loss is close to this number, the model may be predicting values close to zero.
-
-## Check train/validation/test zero-output MAE
-
-```python
-import numpy as np
-
-DATA_PATH = "data/node10_test/dataset_merged.npz"
-TRAIN_SPLIT = 0.8
-VAL_SPLIT = 0.1
-
-with np.load(DATA_PATH, mmap_mode="r") as data:
-    Y = np.asarray(data["amps"], dtype=np.float32)
-
-n = Y.shape[0]
-n_train = int(n * TRAIN_SPLIT)
-n_val = int(n * VAL_SPLIT)
-
-Y_train = Y[:n_train]
-Y_val = Y[n_train:n_train + n_val]
-Y_test = Y[n_train + n_val:]
-
-print("Train zero MAE:", np.mean(np.abs(Y_train)))
-print("Val zero MAE:", np.mean(np.abs(Y_val)))
-print("Test zero MAE:", np.mean(np.abs(Y_test)))
-```
+**Normalisation mismatch**
+Keep `NORMED_DATA` (`data_config.py`), `NORMALIZE_MODEL_OUTPUT` (`training_config.py`), and `normalize_model_output` (`optimiser_config.py`) consistent with each other, or loss/fidelity values will not be comparable across stages.
 
 ---
 
-# 7. Notes for large cluster runs
+## Citation / License
 
-For large datasets and large models:
-
-- Use the cluster/GPU, not a local notebook.
-- Keep `data/`, `Models_*`, `optimiser_*`, logs, and checkpoints out of Git.
-- Use small smoke tests first, for example `N_SAMPLES=1000`, `NUM_EPOCHS=20`, `num_steps=20`.
-- Increase to full-scale values only after the full pipeline runs correctly.
-- Set `store_step_vectors=False` in the optimiser unless you explicitly need all gradient/update vectors.
-- Use absolute paths in config files when running through Slurm.
-- Keep `NORMALIZE_MODEL_OUTPUT`, `NORMED_DATA`, and `normalize_model_output` consistent between data generation, training, and optimisation.
-
----
-
-# 8. Common mistakes
-
-## Import error: `ModuleNotFoundError: No module named 'training_config'`
-
-Add `src/` and `configs/` to `PYTHONPATH`:
-
-```bash
-export PYTHONPATH="$PWD/src:$PWD/configs:$PYTHONPATH"
-```
-
-## Training cannot find the dataset
-
-Check `DATA_PATH` in:
-
-```text
-configs/training_config.py
-```
-
-Make sure the merged file exists:
-
-```bash
-ls -lh data/smoke_test/dataset_merged.npz
-```
-
-## Optimiser cannot load the model
-
-Check `model_path` in:
-
-```text
-configs/optimiser_config.py
-```
-
-It should point to:
-
-```text
-<training output folder>/params.msgpack
-```
-
-## HNN/FNN architecture mismatch
-
-For HNN:
-
-```python
-"MODEL_NAME": "HNN"
-"HIDDEN_DIM": 15000
-```
-
-For FNN:
-
-```python
-"MODEL_NAME": "FNN"
-"HIDDEN_DIM": (2000, 2000, 2000)
-```
-
-The optimiser must use the same architecture format:
-
-```python
-"model_type": "HNN"
-"architecture": 15000
-```
-
-or:
-
-```python
-"model_type": "FNN"
-"architecture": (2000, 2000, 2000)
-```
-
-## Normalisation mismatch
-
-Keep these settings consistent:
-
-```python
-# data_config.py
-NORMED_DATA
-
-# training_config.py
-NORMALIZE_MODEL_OUTPUT
-
-# optimiser_config.py
-normalize_model_output
-```
-
-Do not mix normalised and unnormalised assumptions without checking the loss and fidelity definitions.
-
----
-
-# 9. Minimal command summary
-
-```bash
-cd /path/to/surrogate_model_clean
-conda activate env_jax
-export PYTHONPATH="$PWD/src:$PWD/configs:$PYTHONPATH"
-
-# Generate data after editing configs/data_config.py
-python src/data_generation.py
-
-# Merge generated shards
-python - <<'PY'
-from pathlib import Path
-from data_generation_utils import merge_shards_to_npz
-print(merge_shards_to_npz(Path("data/smoke_test"), "dataset_merged.npz"))
-PY
-
-# Train model after editing configs/training_config.py
-python src/model_training.py
-
-# Run inverse optimisation after editing configs/optimiser_config.py
-python src/optimiser.py
-```
+This repository does not currently include a `LICENSE` or `CITATION` file. Add one before distributing or relying on this code outside of personal/internal use.
