@@ -70,12 +70,12 @@ flax
 optax
 numpy
 matplotlib
-pytheus
+pytheusQ   (PyPI distribution name; imports as "pytheus")
 ```
 
 `jupyter` and `ipykernel` are only needed if you plan to use the notebook.
 
-**PyTheus is not on the standard install line below** — there is no PyPI package name confirmed for this repository's PyTheus dependency. Install it however it is distributed in your environment (e.g. from its own source repository or an internal package index) before continuing; `from pytheus import theseus as th` must succeed.
+**Install `pytheusQ`, not `pytheus`.** PyPI's `pytheus` package is an unrelated Prometheus metrics client. The quantum-optics inverse-design library this repository imports as `from pytheus import theseus as th` is published under the distribution name `pytheusQ`, which installs the `pytheus` module (including `pytheus/theseus.py`).
 
 ### Linux / macOS
 
@@ -83,9 +83,8 @@ pytheus
 cd /path/to/surrogate_model_clean
 python3 -m venv .venv
 source .venv/bin/activate
-pip install numpy matplotlib jax flax optax
+pip install numpy matplotlib jax flax optax pytheusQ
 pip install jupyter ipykernel   # only if you will use the notebook
-# install pytheus separately - see note above
 ```
 
 Add `src/` and `configs/` to `PYTHONPATH` for every terminal session you run scripts from:
@@ -100,9 +99,8 @@ export PYTHONPATH="$PWD/src:$PWD/configs:$PYTHONPATH"
 cd C:\path\to\surrogate_model_clean
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-pip install numpy matplotlib jax flax optax
+pip install numpy matplotlib jax flax optax pytheusQ
 pip install jupyter ipykernel   # only if you will use the notebook
-# install pytheus separately - see note above
 ```
 
 Add `src\` and `configs\` to `PYTHONPATH` for the current PowerShell session:
@@ -424,7 +422,7 @@ optimiser_notebook_results/GHZ_4_quick_test/
 ## Troubleshooting
 
 **`ModuleNotFoundError: No module named 'pytheus'`**
-PyTheus is required by `data_generation_utils.py` and `optimisation_utils.py` but is not installed by the standard pip line in this README. Install it separately for your environment before running any stage.
+Run `pip install pytheusQ` (not `pip install pytheus` — that installs an unrelated Prometheus metrics package on PyPI). `pytheusQ` is the distribution name; it installs the `pytheus` module that `data_generation_utils.py` and `optimisation_utils.py` import.
 
 **`ModuleNotFoundError: No module named 'training_config'` (or `data_config'` / `optimiser_config'`)**
 `src/` and `configs/` are not on `PYTHONPATH`. Set it for the current session:
