@@ -1,10 +1,10 @@
 """
 Quick end-to-end smoke test for surrogate_model_clean.
 
-Runs the full pipeline with tiny settings (~1-2 minutes on CPU):
+Runs the full pipeline with tiny settings (~10 s on CPU):
   1. Data generation   -> data/quick_test/
   2. Shard merging     -> data/quick_test/dataset_merged.npz
-  3. Model training    -> Models_quick_test/run_HNN_4_quick_test/
+  3. Model training    -> Models_quick_test/run_PNN_4_quick_test/
   4. Inverse optimisation -> optimiser_quick_test/GHZ_4_quick_test/
 
 Usage (run from the project root):
@@ -37,7 +37,7 @@ NODES = 4
 DATA_DIR = "data/quick_test"
 DATA_MERGED = f"{DATA_DIR}/dataset_merged.npz"
 MODEL_ROOT = "Models_quick_test"
-MODEL_RUN = "HNN_4_quick_test"
+MODEL_RUN = "PNN_4_quick_test"
 MODEL_PATH = f"{MODEL_ROOT}/run_{MODEL_RUN}/params.msgpack"
 OPT_ROOT = "optimiser_quick_test"
 OPT_FOLDER = "GHZ_4_quick_test"
@@ -51,14 +51,14 @@ DATAGEN_CFG = dict(
     save_to_file=True,
     out_dir_path=DATA_DIR,
     shard_size=200,
-    normed_data=True,
+    normed_data=False,   # project trains on unnormalised amplitude vectors
 )
 
 TRAINING_CFG = {
     "NODES": NODES,
     "DIMENSIONS": 2,
     "DATE": "quick_test",
-    "MODEL_NAME": "HNN",
+    "MODEL_NAME": "PNN",
     "HIDDEN_DIM": 400,
     "DATA_PATH": DATA_MERGED,
     "DATA_SIZE": None,
@@ -85,7 +85,7 @@ OPTIMISER_CFG = {
     "n": NODES,
     "dimensions": 2,
     "target_name": "GHZ",
-    "model_type": "HNN",
+    "model_type": "PNN",
     "generate_data": True,
     "conditioned_data_path": "",
     "max_initial_samples": None,
@@ -95,12 +95,12 @@ OPTIMISER_CFG = {
     "low_fidelity_threshold": 0.999,
     "save_generated_data": False,
     "data_out_dir": "data/optimiser_generated_quick",
-    "normed_data": True,
+    "normed_data": False,   # must match normed_data in data generation
     "generation_gpu_batch_size": 3,
     "data_shard_size": 3,
     "architecture": 400,
     "model_path": MODEL_PATH,
-    "normalize_model_output": False,
+    "normalize_model_output": False,   # must match NORMALIZE_MODEL_OUTPUT in training
     "input_dim": 2 * NODES * (NODES - 1),
     "out_dim": 2 ** NODES,
     "lambda_l1": 1e-3,

@@ -1,12 +1,12 @@
-# Core dependencies for surrogate_model_clean, based on the actual imports
-# in src/ and the notebook (jax, jax.numpy, flax.linen, flax.training,
-# flax.serialization, optax, numpy, matplotlib, pytheus).
+# Core dependencies for surrogate_model_clean.
+# Python >= 3.9 recommended. JAX/Flax compatibility can vary by platform and
+# CUDA version — see https://jax.readthedocs.io/en/latest/installation.html
+# for GPU-specific install instructions.
 #
 # Windows note: installing flax pulls in orbax-checkpoint, which can fail on
 # native Windows with "WinError 206: The filename or extension is too long".
-# See README.md -> Troubleshooting -> WinError 206 before installing on
-# native Windows. WSL2/Linux/HPC is the recommended environment for the
-# full training workflow.
+# See README.md -> Troubleshooting before installing on native Windows.
+# WSL2/Linux/HPC is the recommended environment for the full training workflow.
 numpy
 matplotlib
 jax

@@ -4,7 +4,7 @@ Clean surrogate model training script.
 Main workflow:
 1. Load configuration from config.py
 2. Load generated dataset
-3. Build FNN/HNN model
+3. Build FNN/PNN model
 4. Train using MAE / normalized MAE loss
 5. Save checkpoints, plots, logs, parameters, and test metrics
 """

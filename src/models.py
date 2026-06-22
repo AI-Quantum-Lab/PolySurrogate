@@ -2,13 +2,13 @@
 Model definitions for surrogate training.
 
 Contains:
-- FNN
-- HNN
+- FNN  (Feedforward Neural Network, multi-layer with GELU activations)
+- PNN  (Polynomial Neural Network, single hidden layer with monomial activation)
 - create_model()
 """
 
 from flax import linen as nn
-import numpy as np
+
 
 class FNN(nn.Module):
     hidden_dims: tuple
@@ -25,7 +25,12 @@ class FNN(nn.Module):
         return y_amp
 
 
-class HNN(nn.Module):
+class PNN(nn.Module):
+    """Polynomial Neural Network (PNN).
+
+    One hidden layer of size `hidden_dims` followed by a monomial activation
+    x^(nodes/2).  The output is the unnormalised quantum-state amplitude vector.
+    """
     hidden_dims: int
     out_dims: int
     nodes: int
@@ -34,7 +39,7 @@ class HNN(nn.Module):
     def __call__(self, x):
         x = nn.Dense(self.hidden_dims, use_bias=True)(x)
 
-        # For even node counts, nodes / 2 is integer-valued.
+        # Monomial activation: x^(nodes/2).
         phi = x ** (self.nodes / 2)
 
         y_amp = nn.Dense(self.out_dims, use_bias=True)(phi)
@@ -44,30 +49,33 @@ class HNN(nn.Module):
 def create_model(model_name, hidden_dims, out_dims, nodes):
     model_name = model_name.upper()
 
+    # Backward compatibility: "HNN" was the previous name for PNN.
+    if model_name == "HNN":
+        print("Warning: model_name='HNN' is deprecated. Use 'PNN' instead.")
+        model_name = "PNN"
+
     if model_name == "FNN":
         if isinstance(hidden_dims, int):
             raise ValueError(
                 "For FNN, hidden_dims should be a tuple, e.g. (2000, 2000, 2000)."
             )
-
         return FNN(
             hidden_dims=tuple(hidden_dims),
             out_dims=out_dims,
             nodes=nodes,
         )
 
-    if model_name == "HNN":
+    if model_name == "PNN":
         if isinstance(hidden_dims, (tuple, list)):
             if len(hidden_dims) != 1:
                 raise ValueError(
-                    "For HNN, hidden_dims should be an integer, e.g. 1000."
+                    "For PNN, hidden_dims should be an integer, e.g. 1000."
                 )
             hidden_dims = int(hidden_dims[0])
-
-        return HNN(
+        return PNN(
             hidden_dims=int(hidden_dims),
             out_dims=out_dims,
             nodes=nodes,
         )
 
-    raise ValueError(f"Unknown model_name: {model_name}. Use 'HNN' or 'FNN'.")
+    raise ValueError(f"Unknown model_name: {model_name}. Use 'PNN' or 'FNN'.")

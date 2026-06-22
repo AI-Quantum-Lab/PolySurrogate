@@ -22,14 +22,12 @@ from datetime import date
 
 NPHOTONS = 4
 TARGET_NAME = "GHZ"           # "GHZ" | "W" | "LINEAR_CLUSTER" | "SINGLE" | "ZERO"
-MODEL_TYPE = "HNN"             # "HNN" or "FNN"
+MODEL_TYPE = "PNN"             # "PNN" or "FNN"
 
 DATE = date.today()
 
 
 OPTIMISER_CONFIG = {
-    "description": "inverse optimisation using trained surrogate",
-
     # -------------------------------------------------------------------------
     # Main setup
     # -------------------------------------------------------------------------
@@ -59,22 +57,32 @@ OPTIMISER_CONFIG = {
     "low_fidelity_threshold": 0.999,
     "save_generated_data": False,
     "data_out_dir": "data/optimiser_generated",
-    "normed_data": True,
+
+    # Must match NORMED_DATA in data_config.py.
+    # Controls whether generated starting samples use normalised (True) or
+    # unnormalised (False) amplitude vectors.  For this project the training
+    # data is unnormalised, so this should be False.
+    "normed_data": False,
+
     "generation_gpu_batch_size": 5,
     "data_shard_size": 5,
 
     # -------------------------------------------------------------------------
     # Trained surrogate model
     # -------------------------------------------------------------------------
-    # HNN: integer hidden dim matching training_config HIDDEN_DIM.
+    # PNN: integer hidden dim matching training_config HIDDEN_DIM.
     # FNN: tuple/list matching training_config HIDDEN_DIM.
     "architecture": 400,
 
     # Point this at the params.msgpack produced by model_training.py.
     # Example (smoke-test default):
-    "model_path": "Models_smoke_test/run_HNN_4_smoke_test/params.msgpack",
+    "model_path": "Models_smoke_test/run_PNN_4_smoke_test/params.msgpack",
 
     # Must match NORMALIZE_MODEL_OUTPUT used during training.
+    # Controls whether the model output is L2-normalised inside fidelity
+    # evaluation during optimisation.  Set to the same value that was used
+    # for NORMALIZE_MODEL_OUTPUT in training_config.py.
+    # Does NOT need to match normed_data above — these are separate settings.
     "normalize_model_output": False,
 
     # Derived automatically from NPHOTONS — do not change unless you change n.
@@ -126,7 +134,7 @@ OPTIMISER_CONFIG = {
     # Output
     # -------------------------------------------------------------------------
     # Results are written to <results_root>/<folder_name>/.
-    "results_root": "optimiser_notebook_results",
+    "results_root": "optimiser_results",
     "folder_name": f"{TARGET_NAME}_{NPHOTONS}_smoke_test",
 
     # -------------------------------------------------------------------------
@@ -148,8 +156,8 @@ OPTIMISER_CONFIG = {
 #     "generate_data": False,
 #     "conditioned_data_path": "data/anchor_noise_dataset_8_GHZ/conditioned_dataset.npz",
 #     "architecture": 15000,
-#     "model_path": "Models_prod/run_HNN_8/params.msgpack",
-#     "normalize_model_output": True,
+#     "model_path": "Models_prod/run_PNN_8/params.msgpack",
+#     "normalize_model_output": False,
 #     "input_dim": 2 * NPHOTONS_PROD * (NPHOTONS_PROD - 1),
 #     "out_dim": 2 ** NPHOTONS_PROD,
 #     "num_steps": 10_000,

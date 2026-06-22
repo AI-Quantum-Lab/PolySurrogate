@@ -24,8 +24,9 @@ TRAINING_CONFIG = {
     # -------------------------------------------------------------------------
     # Model configuration
     # -------------------------------------------------------------------------
-    "MODEL_NAME": "HNN",      # "FNN" or "HNN"
-    # HNN: integer hidden dimension.  FNN: tuple, e.g. (2000, 2000, 2000).
+    "MODEL_NAME": "PNN",      # "FNN" or "PNN"
+    # PNN (Polynomial Neural Network): integer hidden dimension.
+    # FNN (Feedforward Neural Network): tuple, e.g. (2000, 2000, 2000).
     "HIDDEN_DIM": 400,
 
     # -------------------------------------------------------------------------
@@ -37,11 +38,26 @@ TRAINING_CONFIG = {
     "DATA_SIZE": None,         # None -> use the full dataset
 
     # -------------------------------------------------------------------------
-    # Target/output configuration
+    # Target/output normalisation
     # -------------------------------------------------------------------------
-    # Must match NORMED_DATA in data_config.py.
-    # True  -> normalize prediction and target before MAE/fidelity metrics
-    # False -> train on raw/unnormalized amplitudes
+    # Controls whether the model output is L2-normalised *inside the loss function*
+    # before computing MAE.
+    #
+    #   False (default) -> training target is the raw unnormalised amplitude vector.
+    #                      The model directly learns to predict unnormalised vectors.
+    #   True            -> both prediction and target are L2-normalised inside the
+    #                      loss before computing MAE (extra step in the loss fn).
+    #
+    # IMPORTANT: This is a SEPARATE setting from NORMED_DATA in data_config.py.
+    # They are NOT required to have the same value.
+    #   - NORMED_DATA controls what is stored in the dataset file.
+    #   - NORMALIZE_MODEL_OUTPUT controls a step inside the loss function at
+    #     training time.
+    #
+    # Consistency requirement:
+    #   NORMALIZE_MODEL_OUTPUT here must match normalize_model_output in
+    #   optimiser_config.py (both must be the same for correct fidelity
+    #   evaluation using the trained model).
     "NORMALIZE_MODEL_OUTPUT": False,
 
     # -------------------------------------------------------------------------
@@ -69,15 +85,17 @@ TRAINING_CONFIG = {
     # -------------------------------------------------------------------------
     # Set RESUME_FULL_STATE=True and point CKPT_DIR_RESTORE at an existing
     # checkpoints/ folder to resume a previous run.
+    # NOTE: if the run folder already exists from a previous run, delete it
+    # before re-running — orbax will raise ValueError if checkpoints exist.
     "RESUME_FULL_STATE": False,
-    "CKPT_DIR_RESTORE": "Models_smoke_test/run_HNN_4_smoke_test/checkpoints",
+    "CKPT_DIR_RESTORE": "Models_smoke_test/run_PNN_4_smoke_test/checkpoints",
 
     # -------------------------------------------------------------------------
     # Output configuration
     # -------------------------------------------------------------------------
     # Outputs are written to <ROOT_FOLDER>/run_<RUN_NAME>/.
     "ROOT_FOLDER": "Models_smoke_test",
-    "RUN_NAME": "HNN_4_smoke_test",
+    "RUN_NAME": "PNN_4_smoke_test",
     "LOSS_NAME": "mae",
 }
 
@@ -95,5 +113,5 @@ TRAINING_CONFIG = {
 #     "NUM_EPOCHS": 20000,
 #     "PATIENCE": 2000,
 #     "ROOT_FOLDER": "./Models_26_05_26",
-#     "RUN_NAME": "HNN_10_normMAE_5M_8",
+#     "RUN_NAME": "PNN_10_5M",
 # })

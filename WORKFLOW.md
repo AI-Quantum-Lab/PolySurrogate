@@ -6,15 +6,15 @@ This document explains what the project does, how the code is organised, and how
 
 ## What the project does
 
-The project learns a **surrogate neural network** that maps photonic graph weights to quantum-state amplitude vectors.  Once trained, the surrogate is used inside an **inverse-design optimiser** that searches for graph configurations that produce a target quantum state (GHZ, W, linear-cluster, …).
+The project learns a **PNN (Polynomial Neural Network) surrogate model** that maps photonic graph weights to unnormalised quantum-state amplitude vectors.  Once trained, the surrogate is used inside an **inverse-design optimiser** that searches for graph configurations that produce a target quantum state (GHZ, W, linear-cluster, …).
 
 ```
-random graph weights  ──►  [PyTheus perfect-matching]  ──►  amplitude vector
+random graph weights  ──►  [PyTheus perfect-matching]  ──►  unnormalised amplitude vector
                                                                    │
                                    ┌───────────────────────────────┘
                                    ▼
-                         [Surrogate neural network]
-                           learns weights ──► amps map
+                         [Surrogate model (PNN / FNN)]
+                           learns weights ──► unnormalised amps map
                                    │
                                    ▼
                          [Inverse optimiser]
@@ -38,12 +38,12 @@ surrogate_model_clean/
 │   ├── data_generation_utils.py
 │   ├── model_training.py       # Entry point: train_surrogate_model()
 │   ├── model_training_utils.py
-│   ├── models.py               # FNN and HNN architectures
+│   ├── models.py               # FNN and PNN architectures
 │   ├── optimiser.py            # Entry point: run_optimisation()
 │   ├── optimisation_utils.py
 │   └── target_states.py        # GHZ, W, cluster, … state definitions
 ├── notebooks/
-│   └── workflow_data_training_optimisation_notebook.ipynb
+│   └── sample_workflow.ipynb   # Beginner-friendly interactive demo
 ├── scripts/
 │   └── run_quick_test.py       # One-command pipeline test (~10 s on CPU)
 ├── requirements.txt
@@ -77,7 +77,7 @@ surrogate_model_clean/
 What it does:
 1. Calls PyTheus to enumerate all perfect matchings for an `n`-node, dimension-2 graph.
 2. Generates random dense graph weight vectors in `[-1, 1]`.
-3. Computes the resulting quantum amplitude vector for each weight sample (using JAX, GPU-accelerated when available).
+3. Computes the resulting **unnormalised** quantum amplitude vector for each weight sample (using JAX, GPU-accelerated when available).
 4. Saves the data as `.npz` shard files.
 
 Key parameters in `data_config.py`:
@@ -87,11 +87,12 @@ Key parameters in `data_config.py`:
 | `VERTICES` | Node / photon count. Must match training and optimisation. |
 | `N_SAMPLES` | Total samples to generate. |
 | `OUT_DIR` | Where shards are written (relative to project root). |
-| `NORMED_DATA` | `True` → normalised amplitudes. Must match training. |
+| `NORMED_DATA` | `False` (default) → store raw unnormalised amplitude vectors. `True` → L2-normalise before saving. Must match `normed_data` in optimiser_config.py. |
 
 After generation, merge shards into a single file:
 
 ```bash
+# PYTHONPATH must already include src/ — see README Installation section
 python -c "
 from pathlib import Path
 from data_generation_utils import merge_shards_to_npz
@@ -109,8 +110,8 @@ merge_shards_to_npz(Path('data/smoke_test'), 'dataset_merged.npz')
 
 What it does:
 1. Loads the merged dataset.
-2. Constructs an `FNN` or `HNN` model.
-3. Trains with AdamW + cosine LR decay using MAE loss.
+2. Constructs a `PNN` (Polynomial Neural Network) or `FNN` model.
+3. Trains with AdamW + cosine LR decay using MAE loss against the unnormalised amplitude vectors.
 4. Saves the best validation checkpoint as `params.msgpack`.
 
 Key parameters in `training_config.py`:
@@ -118,10 +119,10 @@ Key parameters in `training_config.py`:
 | Parameter | Meaning |
 |-----------|---------|
 | `NODES` | Node count. Must match the dataset. |
-| `MODEL_NAME` | `"HNN"` (single hidden layer, polynomial activation) or `"FNN"` (multi-layer). |
-| `HIDDEN_DIM` | Integer for HNN; tuple for FNN, e.g. `(2000, 2000, 2000)`. |
+| `MODEL_NAME` | `"PNN"` (Polynomial Neural Network, single hidden layer) or `"FNN"` (multi-layer). |
+| `HIDDEN_DIM` | Integer for PNN; tuple for FNN, e.g. `(2000, 2000, 2000)`. |
 | `DATA_PATH` | Path to `dataset_merged.npz`. Use a relative path from the project root. |
-| `NORMALIZE_MODEL_OUTPUT` | Must match `NORMED_DATA` in data generation. |
+| `NORMALIZE_MODEL_OUTPUT` | Whether to L2-normalise model output *inside the loss function*. **Independent of `NORMED_DATA`** — see normalisation note below. |
 | `NUM_EPOCHS`, `PATIENCE` | Training budget and early-stop patience. |
 | `ROOT_FOLDER`, `RUN_NAME` | Outputs go in `<ROOT_FOLDER>/run_<RUN_NAME>/`. |
 
@@ -149,11 +150,32 @@ Key parameters in `optimiser_config.py`:
 | `NPHOTONS` | Node count. Must match the trained model. |
 | `TARGET_NAME` | `"GHZ"`, `"W"`, `"LINEAR_CLUSTER"`, `"SINGLE"`, or `"ZERO"`. |
 | `generate_data` | `True` → generate fresh random starts; `False` → load from `conditioned_data_path`. |
-| `architecture` | Must match `HIDDEN_DIM` from training (integer for HNN, tuple for FNN). |
+| `architecture` | Must match `HIDDEN_DIM` from training (integer for PNN, tuple for FNN). |
 | `model_path` | Path to `params.msgpack` from Stage 2. |
 | `normalize_model_output` | Must match `NORMALIZE_MODEL_OUTPUT` from training. |
 | `num_steps` | Gradient-descent budget per sample. |
 | `results_root`, `folder_name` | Outputs go in `<results_root>/<folder_name>/`. |
+
+---
+
+## Normalisation note
+
+There are **two independent normalisation flags** that users sometimes confuse:
+
+| Flag | Location | What it controls |
+|------|----------|-----------------|
+| `NORMED_DATA` | `data_config.py` | Whether amplitude vectors are L2-normalised **in the dataset file** before saving. |
+| `normed_data` | `optimiser_config.py` | Whether starting samples are generated with normalised amplitudes. Must match `NORMED_DATA`. |
+| `NORMALIZE_MODEL_OUTPUT` | `training_config.py` | Whether model output is L2-normalised **inside the loss function** during training. |
+| `normalize_model_output` | `optimiser_config.py` | Whether model output is L2-normalised inside fidelity evaluation. Must match `NORMALIZE_MODEL_OUTPUT`. |
+
+**Consistency requirements:**
+- `NORMED_DATA` (data) **must** match `normed_data` (optimiser).
+- `NORMALIZE_MODEL_OUTPUT` (training) **must** match `normalize_model_output` (optimiser).
+- These two pairs are **independent** — they do not need to have the same value as each other.
+
+**Default project settings:** `NORMED_DATA=False`, `NORMALIZE_MODEL_OUTPUT=False`.  
+The model is trained to predict raw unnormalised amplitude vectors.
 
 ---
 
@@ -172,6 +194,9 @@ Completes in ~10 seconds on CPU.  All outputs go to `data/quick_test/`, `Models_
 ### Standard smoke test using config files
 
 ```bash
+# Set PYTHONPATH first (required for all commands below)
+export PYTHONPATH="$PWD/src:$PWD/configs:$PYTHONPATH"
+
 # 1. Generate data (uses data_config.py defaults: 4 nodes, 1000 samples)
 python src/data_generation.py
 
@@ -237,7 +262,7 @@ The `.gitignore` excludes all generated outputs.  These are created locally and 
 
 - **Working directory:** all scripts must be run from the project root (`surrogate_model_clean/`), and `PYTHONPATH` must include `src/` and `configs/`.
 - **Node-count consistency:** `VERTICES` (data) = `NODES` (training) = `n` / `NPHOTONS` (optimisation). Mismatches cause shape errors.
-- **Normalisation consistency:** `NORMED_DATA` (data) must equal `NORMALIZE_MODEL_OUTPUT` (training) and `normalize_model_output` (optimisation).
-- **Architecture consistency:** `HIDDEN_DIM` (training) must equal `architecture` (optimisation), same type (int for HNN, tuple for FNN).
+- **Normalisation consistency:** see the Normalisation note section above. Two independent pairs must match internally; they need not match each other.
+- **Architecture consistency:** `HIDDEN_DIM` (training) must equal `architecture` (optimisation), same type (int for PNN, tuple for FNN).
 - **JAX device:** code runs on CPU automatically if no GPU is found.  GPU use is transparent — no code changes needed.
 - **PyTheus import:** install `pytheusQ` (not `pytheus`) from PyPI.
