@@ -1,32 +1,54 @@
-# Python
+# =============================================================================
+# surrogate_model_clean — .gitignore
+# Only source code, configs, notebooks, scripts, and docs are tracked.
+# Everything below is generated locally and must not be committed.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Python runtime
+# ---------------------------------------------------------------------------
 __pycache__/
 *.pyc
+*.pyo
+
+# ---------------------------------------------------------------------------
+# Jupyter
+# ---------------------------------------------------------------------------
 .ipynb_checkpoints/
 
-# Data files
+# ---------------------------------------------------------------------------
+# Virtual environments
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+env/
+
+# ---------------------------------------------------------------------------
+# Generated data (produced by data_generation.py / merge_shards_to_npz)
+# ---------------------------------------------------------------------------
 data/
 *.npz
+*.dat
 
-# Model outputs
+# ---------------------------------------------------------------------------
+# Model outputs (produced by model_training.py)
+# ---------------------------------------------------------------------------
 Models*/
-*.msgpack
 checkpoints/
 orbax-checkpoint-tmp-*/
+params_snapshots/
+*.msgpack
+model_info.json
+test_metrics.npz
+run_log.txt
 
-# Optimisation / experiment outputs
-optimiser_notebook_results/
-optimiser_results/
-optimiser_quick_test/
+# ---------------------------------------------------------------------------
+# Optimisation / experiment results (produced by optimiser.py)
+# ---------------------------------------------------------------------------
 results/
-
-# Logs
+optimiser_*/
+plots/
 *.log
 *.out
 *.err
-logging/
 check_runs.log
-
-# Environment files
-.env
-.venv/
-env/

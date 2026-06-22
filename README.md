@@ -41,8 +41,7 @@ surrogate_model_clean/
 │   ├── training_config.py      ← model training settings
 │   └── optimiser_config.py     ← inverse design settings
 ├── notebooks/
-│   ├── sample_workflow.ipynb                       ← start here (beginner-friendly)
-│   └── workflow_data_training_optimisation_notebook.ipynb
+│   └── sample_workflow.ipynb                       ← start here
 ├── scripts/
 │   └── run_quick_test.py       ← one-command full-pipeline test
 ├── src/
@@ -80,7 +79,6 @@ surrogate_model_clean/
 | `scripts/run_quick_test.py` | One-command end-to-end smoke test (~10 s on CPU). |
 | `WORKFLOW.md` | Detailed walkthrough for new users. |
 | `notebooks/sample_workflow.ipynb` | **Start here.** Beginner-friendly notebook; all stages; no config edits needed. |
-| `notebooks/workflow_data_training_optimisation_notebook.ipynb` | Full interactive walkthrough (older; requires editing `REPO_DIR`). |
 
 </details>
 
@@ -392,14 +390,6 @@ jupyter notebook notebooks/sample_workflow.ipynb
 jupyter lab notebooks/sample_workflow.ipynb
 ```
 
-### `notebooks/workflow_data_training_optimisation_notebook.ipynb` — full walkthrough
-
-Runs all three stages interactively with more detail.  Requires editing `REPO_DIR`
-in the first code cell:
-
-```python
-REPO_DIR = Path("/path/to/surrogate_model_clean")
-```
 
 ---
 
