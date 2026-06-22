@@ -3,22 +3,26 @@ Configuration for surrogate inverse optimisation.
 
 Edit this file before running:
 
-    python optimiser.py
+    python src/optimiser.py
 
-This file keeps experiment settings separate from the optimisation logic.
+The values below are SMOKE-TEST defaults (4 photons, GHZ target, generate_data=True)
+that run without any pre-existing dataset file.  The only thing you must edit
+is model_path — point it at the params.msgpack produced by model_training.py.
+
+See the commented-out block at the bottom for production / HPC values.
+All paths are relative to the project root (surrogate_model_clean/).
 """
 
 from datetime import date
-from pathlib import Path
 
 
 # =============================================================================
-# Main optimisation configuration
+# Top-level knobs (change these to switch target / node count / model type)
 # =============================================================================
 
-NPHOTONS = 8
-TARGET_NAME = 'GHZ'
-MODEL_TYPE = "HNN"         # "HNN" or "FNN"
+NPHOTONS = 4
+TARGET_NAME = "GHZ"           # "GHZ" | "W" | "LINEAR_CLUSTER" | "SINGLE" | "ZERO"
+MODEL_TYPE = "HNN"             # "HNN" or "FNN"
 
 DATE = date.today()
 
@@ -37,69 +41,65 @@ OPTIMISER_CONFIG = {
     # -------------------------------------------------------------------------
     # Initial sample data
     # -------------------------------------------------------------------------
-    # If True, generate starting samples using data_generation.generate_dataset().
-    # If False, load starting samples from conditioned_data_path.
-    "generate_data": False,
+    # generate_data=True  -> fresh random starting graphs (no file needed)
+    # generate_data=False -> load from conditioned_data_path
+    "generate_data": True,
 
-    "conditioned_data_path": (
-        f"/home/bo48god/quick_tests/Experiment_data_collection/"
-        f"anchor_noise_dataset_{NPHOTONS}_{TARGET_NAME}/"
-        f"anchor_noise_conditioned_dataset.npz"
-    ),
+    # Only used when generate_data=False.
+    # Edit this path to point at your conditioned dataset.
+    "conditioned_data_path": "data/optimiser_conditioned/conditioned_dataset.npz",
 
-    # Optional cap when loading existing initial samples.
-    # Use None to use all samples in the conditioned dataset.
+    # Optional cap on loaded samples when generate_data=False.
     "max_initial_samples": None,
 
-    # Used when generate_data=True
-    "data_samples": 100,
-    "data_batch_size": 100,
+    # Settings used when generate_data=True
+    "data_samples": 5,
+    "data_batch_size": 5,
     "data_seed": 4,
-    "low_fidelity_threshold": 0.5,
+    "low_fidelity_threshold": 0.999,
     "save_generated_data": False,
     "data_out_dir": "data/optimiser_generated",
     "normed_data": True,
-    "generation_gpu_batch_size": 100,
-    "data_shard_size": 100,
+    "generation_gpu_batch_size": 5,
+    "data_shard_size": 5,
 
     # -------------------------------------------------------------------------
     # Trained surrogate model
     # -------------------------------------------------------------------------
-    # For HNN use integer architecture, e.g. 15000.
-    # For FNN use tuple/list, e.g. (2000, 2000, 2000).
-    "architecture": 15000,
+    # HNN: integer hidden dim matching training_config HIDDEN_DIM.
+    # FNN: tuple/list matching training_config HIDDEN_DIM.
+    "architecture": 400,
 
-    "model_path": (
-        "/home/bo48god/quick_tests/Experiment_data_collection/"
-        "Models_11_05_26/params_8node_HNN.msgpack"
-    ),
+    # Point this at the params.msgpack produced by model_training.py.
+    # Example (smoke-test default):
+    "model_path": "Models_smoke_test/run_HNN_4_smoke_test/params.msgpack",
 
-    # Use True if training used normalised target states / normalised model output.
-    "normalize_model_output": True,
+    # Must match NORMALIZE_MODEL_OUTPUT used during training.
+    "normalize_model_output": False,
 
-    # Derived model dimensions
+    # Derived automatically from NPHOTONS — do not change unless you change n.
     "input_dim": 2 * NPHOTONS * (NPHOTONS - 1),
     "out_dim": 2 ** NPHOTONS,
 
     # -------------------------------------------------------------------------
     # Optimisation objective
     # -------------------------------------------------------------------------
-    # loss = 1 - fidelity + lambda_l1 * sum(abs(x))
+    # loss = (1 - fidelity) + lambda_l1 * sum(abs(x))
     "lambda_l1": 1e-3,
 
     # -------------------------------------------------------------------------
     # Optimisation schedule
     # -------------------------------------------------------------------------
     "seed": 46,
-    "num_steps": 10_000,
+    "num_steps": 20,            # smoke test: increase to 10 000 for real runs
     "early_stop_nn_fid": 0.9999,
 
     "learning_rate": 1e-2,
     "min_learning_rate": 1e-6,
-    "lr_decay_steps": 10_000,
+    "lr_decay_steps": 20,       # smoke test: match num_steps
     "lr_exponent": 1.0,
 
-    # Clip optimised graph weights after each update.
+    # Clip graph weights to this range after each update.
     "clip_min": -1.0,
     "clip_max": 1.0,
 
@@ -113,8 +113,8 @@ OPTIMISER_CONFIG = {
     # Step-history storage
     # -------------------------------------------------------------------------
     # True stores gradients and update vectors for every step.
-    # This is useful for debugging, but can create very large JSON files.
-    "store_step_vectors": True,
+    # Creates large JSON files for long runs — set False for production.
+    "store_step_vectors": False,
 
     # -------------------------------------------------------------------------
     # Pruning configuration
@@ -125,10 +125,9 @@ OPTIMISER_CONFIG = {
     # -------------------------------------------------------------------------
     # Output
     # -------------------------------------------------------------------------
-    "results_root": str(
-        Path(f"/home/bo48god/quick_tests/Experiment_data_collection/optimisation/{NPHOTONS}_node")
-    ),
-    "folder_name": f"{TARGET_NAME}_100_sample_clean",
+    # Results are written to <results_root>/<folder_name>/.
+    "results_root": "optimiser_notebook_results",
+    "folder_name": f"{TARGET_NAME}_{NPHOTONS}_smoke_test",
 
     # -------------------------------------------------------------------------
     # Optional metadata
@@ -136,5 +135,27 @@ OPTIMISER_CONFIG = {
     "date": str(DATE),
     "k_value": 0,
     "noise": 0,
-    "CPU_GPU": "GPU",
+    "CPU_GPU": "CPU",
 }
+
+# =============================================================================
+# Production / HPC values (uncomment and edit model_path for large runs)
+# =============================================================================
+# NPHOTONS_PROD = 8
+# OPTIMISER_CONFIG.update({
+#     "n": NPHOTONS_PROD,
+#     "target_name": "GHZ",
+#     "generate_data": False,
+#     "conditioned_data_path": "data/anchor_noise_dataset_8_GHZ/conditioned_dataset.npz",
+#     "architecture": 15000,
+#     "model_path": "Models_prod/run_HNN_8/params.msgpack",
+#     "normalize_model_output": True,
+#     "input_dim": 2 * NPHOTONS_PROD * (NPHOTONS_PROD - 1),
+#     "out_dim": 2 ** NPHOTONS_PROD,
+#     "num_steps": 10_000,
+#     "lr_decay_steps": 10_000,
+#     "store_step_vectors": False,
+#     "results_root": f"optimiser_results/{NPHOTONS_PROD}_node",
+#     "folder_name": "GHZ_100_sample_prod",
+#     "CPU_GPU": "GPU",
+# })

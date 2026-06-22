@@ -9,7 +9,6 @@ data/
 
 # Model outputs
 Models*/
-Models_notebook_test/
 *.msgpack
 checkpoints/
 orbax-checkpoint-tmp-*/
@@ -17,6 +16,7 @@ orbax-checkpoint-tmp-*/
 # Optimisation / experiment outputs
 optimiser_notebook_results/
 optimiser_results/
+optimiser_quick_test/
 results/
 
 # Logs

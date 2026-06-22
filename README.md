@@ -3,60 +3,29 @@
 A JAX/Flax pipeline for photonic quantum-state design via a learned surrogate model.
 
 ```text
-graph / edge weights  ->  surrogate model  ->  predicted amplitude vector
+graph weights  →  surrogate neural network  →  predicted amplitude vector
 ```
 
 The pipeline has three stages:
 
 1. **Data generation** — generate random dense graph weights and the corresponding quantum-state amplitude vectors using a PyTheus perfect-matching catalogue.
 2. **Model training** — train a surrogate neural network (FNN or HNN) to learn the graph-weights → amplitudes map.
-3. **Inverse design optimisation** — use the trained surrogate to optimise graph weights toward a target state (GHZ, W, linear-cluster, ...), verified against PyTheus and pruned to a sparse graph.
-
----
-
-## Installation on Windows / Linux
-
-Required packages are listed in `requirements.txt` (`jax`, `flax`, `optax`, `numpy`, `matplotlib`, `pytheusQ`). `jupyter`/`ipykernel` are only needed for the notebook and are not in `requirements.txt`.
-
-> **Install `pytheusQ`, not `pytheus`.** PyPI's `pytheus` is an unrelated Prometheus metrics client. `pytheusQ` is the distribution that installs the actual `pytheus` module this code imports (`pytheus.theseus`).
-
-> **Windows note:** installing `flax` pulls in `orbax-checkpoint`, which can fail on native Windows with `WinError 206: The filename or extension is too long`, even in a fresh virtual environment with a short path. This is a Windows path-length limitation, not a bug in this repository — see [Troubleshooting](#troubleshooting) before installing. **Native Windows support for the full training workflow is unverified and partial until this is resolved.** WSL2, native Linux, or an HPC/cluster environment is recommended for running the full pipeline (data generation, training, and optimisation).
-
-### Linux / macOS
-
-```bash
-cd /path/to/surrogate_model_clean
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-pip install jupyter ipykernel   # only if you will use the notebook
-export PYTHONPATH="$PWD/src:$PWD/configs:$PYTHONPATH"
-```
-
-### Windows (PowerShell)
-
-```powershell
-cd C:\path\to\surrogate_model_clean
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-pip install jupyter ipykernel   # only if you will use the notebook
-$env:PYTHONPATH = "$PWD\src;$PWD\configs;$env:PYTHONPATH"
-```
-
-`PYTHONPATH` must be set in every new terminal session before running scripts. For GPU use, install the JAX build matching your CUDA version (see JAX's own install docs) — the code also runs on CPU, falling back to `CpuDevice` automatically if no GPU is found.
+3. **Inverse design optimisation** — use the trained surrogate to optimise graph weights toward a target state (GHZ, W, linear-cluster, …), verified against PyTheus and pruned to a sparse graph.
 
 ---
 
 ## Table of contents
 
 - [Repository structure](#repository-structure)
-- [Minimal smoke test](#minimal-smoke-test)
+- [Installation](#installation)
+- [Quick start (one command)](#quick-start-one-command)
+- [Configuration](#configuration)
 - [Data generation](#data-generation)
 - [Model training](#model-training)
 - [Inverse design optimisation](#inverse-design-optimisation)
 - [Notebook workflow](#notebook-workflow)
 - [Expected outputs](#expected-outputs)
+- [Files not tracked by Git](#files-not-tracked-by-git)
 - [Troubleshooting](#troubleshooting)
 - [Citation / License](#citation--license)
 
@@ -68,11 +37,13 @@ $env:PYTHONPATH = "$PWD\src;$PWD\configs;$env:PYTHONPATH"
 surrogate_model_clean/
 ├── configs/
 │   ├── __init__.py
-│   ├── data_config.py
-│   ├── training_config.py
-│   └── optimiser_config.py
+│   ├── data_config.py          ← data generation settings
+│   ├── training_config.py      ← model training settings
+│   └── optimiser_config.py     ← inverse design settings
 ├── notebooks/
 │   └── workflow_data_training_optimisation_notebook.ipynb
+├── scripts/
+│   └── run_quick_test.py       ← one-command full-pipeline test
 ├── src/
 │   ├── __init__.py
 │   ├── data_generation.py
@@ -83,17 +54,17 @@ surrogate_model_clean/
 │   ├── optimiser.py
 │   ├── optimisation_utils.py
 │   └── target_states.py
+├── WORKFLOW.md                 ← detailed workflow description
 ├── .gitignore
+├── requirements.txt
 └── README.md
 ```
-
-Scripts take no command-line arguments — each reads its settings from the matching file in `configs/` at import time. Generated data, trained models, checkpoints, logs, and optimisation outputs are gitignored and stay local.
 
 <details>
 <summary>File reference</summary>
 
 | File | Purpose |
-|---|---|
+|------|---------|
 | `configs/data_config.py` | Settings for data generation. |
 | `configs/training_config.py` | Settings for surrogate model training. |
 | `configs/optimiser_config.py` | Settings for inverse-design optimisation. |
@@ -105,104 +76,170 @@ Scripts take no command-line arguments — each reads its settings from the matc
 | `src/optimiser.py` | Main inverse-design script (`run_optimisation()`). |
 | `src/optimisation_utils.py` | Model loading, optimisation step, PyTheus verification, pruning, plotting. |
 | `src/target_states.py` | Target-state definitions: GHZ, W, linear-cluster, single, zero. |
+| `scripts/run_quick_test.py` | One-command end-to-end smoke test (~10 s on CPU). |
+| `WORKFLOW.md` | Detailed walkthrough for new users. |
 | `notebooks/workflow_data_training_optimisation_notebook.ipynb` | Interactive walkthrough of the full workflow. |
 
 </details>
 
 ---
 
-## Minimal smoke test
+## Installation
 
-Confirms the environment works end to end on a tiny 4-node example, matching the run already captured in the [notebook](#notebook-workflow).
+Required packages: `jax`, `flax`, `optax`, `numpy`, `matplotlib`, `pytheusQ`.  
+`jupyter`/`ipykernel` are only needed for the notebook.
 
-`configs/data_config.py` ships ready to go. `configs/training_config.py` and `configs/optimiser_config.py` ship with production values and another machine's absolute paths — edit both before running.
+> **Install `pytheusQ`, not `pytheus`.** PyPI's `pytheus` is an unrelated Prometheus metrics client. `pytheusQ` is the distribution that installs the `pytheus` module (`pytheus.theseus`) that this code imports.
 
-**1. Generate data**
+> **Windows note:** installing `flax` pulls in `orbax-checkpoint`, which can fail on native Windows with `WinError 206: The filename or extension is too long`. WSL2, native Linux, or an HPC/cluster environment is recommended — see [Troubleshooting](#troubleshooting).
 
-```bash
-python src/data_generation.py
-```
-Output: shards in `data/smoke_test/`.
-
-**2. Merge shards**
+### Linux / macOS
 
 ```bash
-python -c "from pathlib import Path; from data_generation_utils import merge_shards_to_npz; print(merge_shards_to_npz(Path('data/smoke_test'), 'dataset_merged.npz'))"
+cd /path/to/surrogate_model_clean
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+# Optional: only needed for the notebook
+pip install jupyter ipykernel
+export PYTHONPATH="$PWD/src:$PWD/configs:$PYTHONPATH"
 ```
-Output: `data/smoke_test/dataset_merged.npz`.
 
-**3. Train**
+### Windows (PowerShell)
 
-Edit `configs/training_config.py` with small test values (see dropdown), then:
+```powershell
+cd C:\path\to\surrogate_model_clean
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+# Optional: only needed for the notebook
+pip install jupyter ipykernel
+$env:PYTHONPATH = "$PWD\src;$PWD\configs;$env:PYTHONPATH"
+```
+
+`PYTHONPATH` must be set in every new terminal session before running scripts.  For GPU use, install the JAX build matching your CUDA version — the code falls back to CPU automatically if no GPU is found.
+
+---
+
+## Quick start (one command)
+
+Runs the full pipeline in ~10 seconds on CPU.  No config edits needed.
 
 ```bash
-python src/model_training.py
-```
-Output: `Models_smoke_test/run_HNN_4_smoke_test/params.msgpack`.
-
-<details>
-<summary>Smoke-test values for TRAINING_CONFIG</summary>
-
-```python
-"NODES": 4,
-"MODEL_NAME": "HNN",
-"HIDDEN_DIM": 400,
-"DATA_PATH": "data/smoke_test/dataset_merged.npz",
-"DATA_SIZE": None,
-"NUM_EPOCHS": 20,
-"PATIENCE": 10,
-"BATCH_SIZE": 100,
-"LR_DECAY_UNTIL_EPOCH": 20,
-"RESUME_FULL_STATE": False,
-"ROOT_FOLDER": "./Models_smoke_test",
-"RUN_NAME": "HNN_4_smoke_test",
+cd surrogate_model_clean
+source .venv/bin/activate   # or activate your environment
+PYTHONPATH="$PWD/src:$PWD/configs" python scripts/run_quick_test.py
 ```
 
-</details>
+Expected output:
 
-**4. Optimise**
+```text
+surrogate_model_clean — quick end-to-end smoke test
 
-Edit `configs/optimiser_config.py`: `NPHOTONS = 4`, `MODEL_TYPE = "HNN"`, and in `OPTIMISER_CONFIG` set `"architecture": 400`, `"generate_data": True`, and `"model_path"` to the `params.msgpack` from step 3. Then:
+============================
+  Stage 1 / 4 — Data generation
+============================
+  Generated 1 shard(s) in 0.2s -> data/quick_test
 
-```bash
-python src/optimiser.py
+============================
+  Stage 2 / 4 — Shard merging
+============================
+  Merged in 0.0s -> data/quick_test/dataset_merged.npz
+
+============================
+  Stage 3 / 4 — Model training
+============================
+  Training complete in 3.4s -> Models_quick_test/run_HNN_4_quick_test
+  [OK] params.msgpack
+  [OK] model_info.json
+  [OK] training_curves.png
+
+============================
+  Stage 4 / 4 — Inverse-design optimisation
+============================
+  Optimisation complete in 5.1s -> optimiser_quick_test/GHZ_4_quick_test
+  [OK] best_graph_solution.json
+  [OK] optimisation_summary.json
+  [OK] log.txt
+
+============================
+  ALL STAGES PASSED  (11.0s total)
+============================
 ```
-Output: results under `optimiser_notebook_results/` — see [Expected outputs](#expected-outputs).
+
+---
+
+## Configuration
+
+All user-facing settings are in `configs/`.  You should not need to open any `src/` file for a standard run.
+
+The configs ship with **smoke-test defaults** (4 nodes, small sample counts, relative paths) that work out of the box.  Each file also contains a commented-out production block for large HPC runs.
+
+### `configs/data_config.py` — Data generation
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `VERTICES` | `4` | Graph nodes / photons. Must match training and optimisation. |
+| `DIMENSIONS` | `2` | Local dimension. Use `2` for qubit-like systems. |
+| `N_SAMPLES` | `1000` | Number of random graph samples to generate. |
+| `BATCH_SIZE` | `100` | Samples per JAX batch. |
+| `SEED` | `0` | Random seed. |
+| `SAVE_TO_FILE` | `True` | Write `.npz` shards to disk. |
+| `OUT_DIR` | `'data/smoke_test'` | Output folder (relative to project root). |
+| `SHARD_SIZE` | `1000` | Samples per shard file. |
+| `NORMED_DATA` | `True` | Normalised amplitudes. Must match `NORMALIZE_MODEL_OUTPUT`. |
+
+### `configs/training_config.py` — Model training
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `NODES` | `4` | Node count. Must match the dataset. |
+| `MODEL_NAME` | `"HNN"` | `"HNN"` or `"FNN"`. |
+| `HIDDEN_DIM` | `400` | Integer for HNN; tuple for FNN, e.g. `(2000, 2000, 2000)`. |
+| `DATA_PATH` | `"data/smoke_test/dataset_merged.npz"` | Path to merged dataset. Edit for your own data. |
+| `DATA_SIZE` | `None` | Cap samples; `None` uses all. |
+| `NORMALIZE_MODEL_OUTPUT` | `False` | Must match `NORMED_DATA`. |
+| `NUM_EPOCHS` | `20` | Training epochs (smoke test). Use `20000` for production. |
+| `PATIENCE` | `10` | Early-stop patience in epochs. |
+| `BATCH_SIZE` | `100` | Mini-batch size. |
+| `ROOT_FOLDER` | `"Models_smoke_test"` | Output root. |
+| `RUN_NAME` | `"HNN_4_smoke_test"` | Run sub-folder name. |
+| `RESUME_FULL_STATE` | `False` | Set `True` to resume from `CKPT_DIR_RESTORE`. |
+
+### `configs/optimiser_config.py` — Inverse design
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `NPHOTONS` | `4` | Node count. Must match the trained model. |
+| `TARGET_NAME` | `"GHZ"` | `"GHZ"`, `"W"`, `"LINEAR_CLUSTER"`, `"SINGLE"`, or `"ZERO"`. |
+| `MODEL_TYPE` | `"HNN"` | Must match the trained model. |
+| `generate_data` | `True` | Generate fresh starts on-the-fly (no file needed). |
+| `conditioned_data_path` | — | Used when `generate_data=False`. Edit to your `.npz` path. |
+| `architecture` | `400` | Must match `HIDDEN_DIM` from training (int for HNN, tuple for FNN). |
+| `model_path` | `"Models_smoke_test/run_HNN_4_smoke_test/params.msgpack"` | **Edit this** after training. |
+| `normalize_model_output` | `False` | Must match `NORMALIZE_MODEL_OUTPUT` from training. |
+| `num_steps` | `20` | Optimisation steps per sample (smoke test). Use `10000` for production. |
+| `results_root` | `"optimiser_notebook_results"` | Output root. |
+| `store_step_vectors` | `False` | `True` stores gradients per step (large files; use for debugging only). |
 
 ---
 
 ## Data generation
 
-Generates random dense graph weights and the corresponding amplitude vectors, saved as `.npz` shards.
-
-**File to edit:** `configs/data_config.py`
-
-**Command:**
 ```bash
+# Edit configs/data_config.py first (or use defaults for smoke test)
 python src/data_generation.py
+
+# Then merge shards into one file for training
+python -c "
+from pathlib import Path
+from data_generation_utils import merge_shards_to_npz
+merge_shards_to_npz(Path('data/smoke_test'), 'dataset_merged.npz')
+"
 ```
 
-**Expected output:** shard files (`data_00000.npz`, ...), `metadata.json`, and a `logs/` folder inside `OUT_DIR`.
-
 <details>
-<summary>Config reference (data_config.py)</summary>
-
-| Setting | Meaning |
-|---|---|
-| `VERTICES` | Number of graph vertices / photons / nodes. |
-| `DIMENSIONS` | Local dimension. Usually `2`. |
-| `N_SAMPLES` | Number of random graph samples to generate. |
-| `BATCH_SIZE` | Samples processed per JAX batch. |
-| `SEED` | Random seed. |
-| `SAVE_TO_FILE` | If `True`, save `.npz` shards to disk. |
-| `OUT_DIR` | Output folder for generated shards. |
-| `SHARD_SIZE` | Samples per saved shard. |
-| `NORMED_DATA` | If `True`, save normalised amplitudes; if `False`, raw amplitudes. |
-
-</details>
-
-<details>
-<summary>Optional: call generate_dataset() directly with custom arguments</summary>
+<summary>Call generate_dataset() directly with custom arguments</summary>
 
 ```python
 from data_generation import generate_dataset
@@ -216,59 +253,25 @@ out_dir = generate_dataset(
     save_to_file=True,
     out_dir_path="data/node4_test",
     shard_size=500,
-    normed_data=False,
+    normed_data=True,
 )
 ```
 
 </details>
 
-Training expects one merged file:
-
-```bash
-python -c "from pathlib import Path; from data_generation_utils import merge_shards_to_npz; print(merge_shards_to_npz(Path('data/node4_test'), 'dataset_merged.npz'))"
-```
-
-This produces `dataset_merged.npz` with keys `weights` and `amps`. For an `n`-node, dimension-2 system: `input_dim = 2 * n * (n - 1)`, `out_dim = 2 ** n`.
-
 ---
 
 ## Model training
 
-Trains a surrogate (`FNN` or `HNN`) to learn the weights → amplitudes map.
-
-**File to edit:** `configs/training_config.py` (`TRAINING_CONFIG`)
-
-**Command:**
 ```bash
+# Edit configs/training_config.py: set DATA_PATH to your merged dataset
 python src/model_training.py
 ```
 
-**Expected output:** `<ROOT_FOLDER>/run_<RUN_NAME>/params.msgpack`, plus `model_info.json`, plots, checkpoints, and `test_metrics.npz`.
+The resulting `params.msgpack` is the `model_path` for the optimiser.
 
 <details>
-<summary>Config reference (TRAINING_CONFIG)</summary>
-
-| Setting | Meaning |
-|---|---|
-| `NODES` | Number of nodes/photons in the dataset. Must match the dataset. |
-| `MODEL_NAME` | `"HNN"` or `"FNN"`. |
-| `HIDDEN_DIM` | Integer for `HNN`; tuple/list for `FNN`, e.g. `(2000, 2000, 2000)`. |
-| `DATA_PATH` | Path to the merged `.npz` dataset. Must be edited from the shipped absolute path. |
-| `DATA_SIZE` | Number of samples to use; `None` uses the full dataset. |
-| `NORMALIZE_MODEL_OUTPUT` | Must match `NORMED_DATA` used during data generation. |
-| `TRAIN_SPLIT`, `VAL_SPLIT`, `TEST_SPLIT` | Dataset split fractions (must sum to 1.0). |
-| `LEARNING_RATE`, `LR_AFTER_DECAY`, `LR_DECAY_UNTIL_EPOCH` | Cosine learning-rate schedule. |
-| `BATCH_SIZE`, `NUM_EPOCHS`, `PATIENCE`, `TOLERANCE`, `INIT_KEY` | Training loop settings. |
-| `RESUME_FULL_STATE`, `CKPT_DIR_RESTORE` | Set `RESUME_FULL_STATE=True` and point `CKPT_DIR_RESTORE` at a checkpoint directory to resume training. |
-| `ROOT_FOLDER`, `RUN_NAME` | Where outputs are written: `<ROOT_FOLDER>/run_<RUN_NAME>/`. |
-| `LOSS_NAME` | Label used in plots/logs (training itself always uses MAE). |
-
-</details>
-
-<details>
-<summary>Optional: edit config and retrain from a notebook/REPL</summary>
-
-`model_training.py` reads `TRAINING_CONFIG` at import time, so changing it in a running session requires reloading the module:
+<summary>Override config at runtime (notebook / REPL)</summary>
 
 ```python
 import importlib
@@ -279,10 +282,9 @@ training_config.TRAINING_CONFIG.update({
     "MODEL_NAME": "HNN",
     "HIDDEN_DIM": 400,
     "DATA_PATH": "data/node4_test/dataset_merged.npz",
-    "DATA_SIZE": None,
     "NUM_EPOCHS": 20,
-    "ROOT_FOLDER": "./Models_notebook_test",
-    "RUN_NAME": "HNN_4_quick_test",
+    "ROOT_FOLDER": "./Models_test",
+    "RUN_NAME": "HNN_4_quick",
 })
 
 import model_training
@@ -293,52 +295,19 @@ run_dir = model_training.train_surrogate_model()
 
 </details>
 
-The resulting `params.msgpack` becomes `model_path` in the optimiser config.
-
 ---
 
 ## Inverse design optimisation
 
-Uses the trained surrogate to optimise graph weights toward a target state, verified against PyTheus and pruned to a sparse graph.
-
-**File to edit:** `configs/optimiser_config.py` (`NPHOTONS`, `TARGET_NAME`, `MODEL_TYPE`, `OPTIMISER_CONFIG`)
-
-**Command:**
 ```bash
+# Edit configs/optimiser_config.py:
+#   - set model_path to the params.msgpack from training
+#   - set NPHOTONS, TARGET_NAME, architecture to match your model
 python src/optimiser.py
 ```
 
-**Expected output:** results under `<results_root>/<folder_name>/` — see [Expected outputs](#expected-outputs).
-
 <details>
-<summary>Config reference (OPTIMISER_CONFIG)</summary>
-
-| Setting | Meaning |
-|---|---|
-| `n` | Number of nodes/photons. Must match the trained model. |
-| `target_name` | `"GHZ"`, `"W"`, `"LINEAR_CLUSTER"` (also `"CLUSTER"`/`"LINEAR"`), `"SINGLE"`, or `"ZERO"`. `"SINGLE"` requires `2**n > 10` (i.e. `n >= 4`). |
-| `model_type` | `"HNN"` or `"FNN"`. Must match the trained model. |
-| `generate_data` | `True` generates fresh starting samples via `data_generation.generate_dataset()`; `False` loads samples from `conditioned_data_path`. |
-| `conditioned_data_path` | Path to an existing `.npz` with `weights`/`amps` keys, used when `generate_data=False`. Must be edited from the shipped absolute path if used. |
-| `architecture` | `HNN` integer hidden dim, or `FNN` tuple/list. Must match the trained model. |
-| `model_path` | Path to the trained `params.msgpack`. Must be edited from the shipped absolute path. |
-| `normalize_model_output` | Must match the training/data normalisation choice. |
-| `input_dim`, `out_dim` | `2 * n * (n - 1)` and `2 ** n`. |
-| `lambda_l1` | L1 sparsity weight. Objective is `loss = 1 - fidelity + lambda_l1 * sum(abs(x))`. |
-| `num_steps`, `early_stop_nn_fid` | Optimisation step budget and early-stop fidelity. |
-| `learning_rate`, `min_learning_rate`, `lr_decay_steps`, `lr_exponent` | Cosine-decay Adam schedule for the graph weights. |
-| `clip_min`, `clip_max` | Bounds applied to graph weights after each update. |
-| `print_every`, `verify_every` | Logging/PyTheus-verification frequency. |
-| `store_step_vectors` | `True` stores every gradient/update vector — large JSON files for long runs; use `False` for production runs. |
-| `prune_fid_tolerance`, `prune_thresholds` | Progressive-threshold pruning settings. |
-| `results_root`, `folder_name` | Output location: `<results_root>/<folder_name>/`. |
-
-</details>
-
-<details>
-<summary>Optional: run with a custom config dict (as used in the notebook)</summary>
-
-`run_optimisation()` accepts a config dict directly:
+<summary>Run with a custom config dict (as used in the notebook)</summary>
 
 ```python
 from optimiser import run_optimisation
@@ -361,7 +330,7 @@ CFG_OPT = {
     "generation_gpu_batch_size": 5,
     "data_shard_size": 5,
     "architecture": 400,
-    "model_path": "Models_notebook_test/run_HNN_4_quick_test/params.msgpack",
+    "model_path": "Models_smoke_test/run_HNN_4_smoke_test/params.msgpack",
     "normalize_model_output": False,
     "input_dim": 24,
     "out_dim": 16,
@@ -393,29 +362,26 @@ result_dir = run_optimisation(CFG_OPT)
 
 ## Notebook workflow
 
-`notebooks/workflow_data_training_optimisation_notebook.ipynb` runs all three stages interactively. Its saved output shows a full `NODES=4` run completing successfully on CPU.
+`notebooks/workflow_data_training_optimisation_notebook.ipynb` runs all three stages interactively.  Its saved output shows a complete `NODES=4` run on CPU.
 
-Edit `REPO_DIR` in the first code cell to your own repository path before running:
+Edit `REPO_DIR` in the first code cell before running:
 
 ```python
 REPO_DIR = Path("/path/to/surrogate_model_clean")
 ```
-
-After confirming the workflow runs, increase `NODES`, sample counts, epochs, and optimisation steps, then move final settings back into `configs/*.py` for terminal/cluster use.
 
 ---
 
 ## Expected outputs
 
 <details>
-<summary>Data generation — <code>OUT_DIR</code></summary>
+<summary>Data generation — <code>OUT_DIR/</code></summary>
 
 ```text
 data/smoke_test/
 ├── data_00000.npz
-├── data_00001.npz
 ├── metadata.json
-├── dataset_merged.npz      # after merging
+├── dataset_merged.npz      ← after merging
 └── logs/
     └── data_generation_<timestamp>.log
 ```
@@ -433,7 +399,7 @@ Models_smoke_test/run_HNN_4_smoke_test/
 │   ├── training_curves.png
 │   └── test_fidelity_curve.png
 ├── model_info.json
-├── params.msgpack
+├── params.msgpack          ← use as model_path in optimiser config
 ├── run_log.txt
 └── test_metrics.npz
 ```
@@ -444,7 +410,7 @@ Models_smoke_test/run_HNN_4_smoke_test/
 <summary>Inverse optimisation — <code>&lt;results_root&gt;/&lt;folder_name&gt;/</code></summary>
 
 ```text
-optimiser_notebook_results/GHZ_4_quick_test/
+optimiser_notebook_results/GHZ_4_smoke_test/
 ├── best_graph_solution.json
 ├── cfg.json
 ├── optimisation_summary.json
@@ -463,35 +429,48 @@ optimiser_notebook_results/GHZ_4_quick_test/
 
 ---
 
+## Files not tracked by Git
+
+The `.gitignore` excludes all generated outputs.  These are local and must not be committed:
+
+| Pattern | What it covers |
+|---------|---------------|
+| `data/` | All generated datasets |
+| `*.npz` | Shard and merged data files |
+| `Models*/` | Trained model directories |
+| `*.msgpack` | Serialised model parameters |
+| `checkpoints/` | Orbax checkpoint directories |
+| `optimiser_*/`, `results/` | Optimisation output directories |
+| `*.log`, `*.out`, `*.err` | Log files |
+| `.venv/`, `__pycache__/` | Environment and bytecode |
+
+---
+
 ## Troubleshooting
 
-**`ModuleNotFoundError: No module named 'pytheus'`**
-Run `pip install pytheusQ`, not `pip install pytheus` (the latter is an unrelated Prometheus metrics package).
+**`ModuleNotFoundError: No module named 'pytheus'`**  
+Run `pip install pytheusQ`, not `pip install pytheus`.
 
-**`[WinError 206] The filename or extension is too long`** (native Windows only)
-- **Cause:** Installing `flax` pulls in `orbax-checkpoint`, whose package contents include deeply nested file paths that exceed Windows' default 260-character path-length limit. This is a Windows/packaging limitation, not a bug in this repository's code.
-- **Recommended solution:** Use WSL2, native Linux, or an HPC/cluster environment for the full training workflow. This is currently the most reliable path and the one this project's workflow has actually been verified on.
-- **Alternative:** If you have administrator rights, enable Windows Long Path support (`gpedit.msc` → Computer Configuration → Administrative Templates → System → Filesystem → "Enable Win32 long paths", or set the registry value `HKLM\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled = 1`), then retry the install in a new terminal.
-- **Note:** Using a shorter project or virtual-environment path by itself may not be sufficient to avoid this error.
-- **Status:** Native Windows is **partially supported** — installation of `flax`/`optax` and the full training/optimisation workflow are not confirmed to work on native Windows unless Long Path support is enabled and the workflow has been independently verified end to end.
+**`ModuleNotFoundError: No module named 'training_config'`** (or `data_config` / `optimiser_config`)  
+`PYTHONPATH` does not include `src/` and `configs/` — see [Installation](#installation).
 
-**`ModuleNotFoundError: No module named 'training_config'`** (or `data_config`/`optimiser_config`)
-`src/` and `configs/` are not on `PYTHONPATH` for this session — see [Installation](#installation-on-windows--linux).
+**`FileNotFoundError` on `DATA_PATH` or `model_path`**  
+The config ships with relative paths that assume you run from the project root.  Check that your working directory is `surrogate_model_clean/` and that the file was actually generated.
 
-**`FileNotFoundError` pointing at `/home/...`**
-The committed configs ship with absolute paths from the original author's machine (`DATA_PATH`, `CKPT_DIR_RESTORE`, `model_path`, `conditioned_data_path`, `results_root`). Edit these to local paths.
+**`[WinError 206] The filename or extension is too long`** (Windows only)  
+Installing `flax` pulls in `orbax-checkpoint`, which exceeds Windows' 260-character path limit.  Enable Windows Long Path support (`gpedit.msc` → System → Filesystem → "Enable Win32 long paths"), or use WSL2 / native Linux.
 
-**`Jax plugin configuration error` / `cuInit failed` on startup**
-JAX tried to use a CUDA plugin that doesn't match the available CUDA libraries. Non-fatal — it falls back to `CpuDevice` and continues. Install a matching JAX/CUDA build to use a GPU.
+**`HNN`/`FNN` architecture mismatch**  
+`HIDDEN_DIM` (training) and `architecture` (optimiser) must be the same value and type: an integer for HNN, a tuple/list for FNN.
 
-**`HNN`/`FNN` architecture mismatch**
-`HIDDEN_DIM` (training) and `architecture` (optimiser) must use the same format and value: an integer for `HNN`, a tuple/list for `FNN`.
+**Normalisation mismatch**  
+Keep `NORMED_DATA`, `NORMALIZE_MODEL_OUTPUT`, and `normalize_model_output` consistent across all three stages.
 
-**Normalisation mismatch**
-Keep `NORMED_DATA`, `NORMALIZE_MODEL_OUTPUT`, and `normalize_model_output` consistent across data generation, training, and optimisation, or loss/fidelity values won't be comparable.
+**`Jax plugin configuration error` / `cuInit failed` on startup**  
+JAX tried to use a CUDA plugin that doesn't match the available CUDA libraries.  Non-fatal — it falls back to CPU automatically.  Install a matching JAX/CUDA build to use a GPU.
 
 ---
 
 ## Citation / License
 
-This repository does not currently include a `LICENSE` or `CITATION` file. Add one before distributing or relying on this code outside of personal/internal use.
+This repository does not currently include a `LICENSE` or `CITATION` file.  Add one before distributing or relying on this code outside of personal/internal use.
