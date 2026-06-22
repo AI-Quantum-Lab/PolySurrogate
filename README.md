@@ -41,6 +41,7 @@ surrogate_model_clean/
 │   ├── training_config.py      ← model training settings
 │   └── optimiser_config.py     ← inverse design settings
 ├── notebooks/
+│   ├── sample_workflow.ipynb                       ← start here (beginner-friendly)
 │   └── workflow_data_training_optimisation_notebook.ipynb
 ├── scripts/
 │   └── run_quick_test.py       ← one-command full-pipeline test
@@ -78,7 +79,8 @@ surrogate_model_clean/
 | `src/target_states.py` | Target-state definitions: GHZ, W, linear-cluster, single, zero. |
 | `scripts/run_quick_test.py` | One-command end-to-end smoke test (~10 s on CPU). |
 | `WORKFLOW.md` | Detailed walkthrough for new users. |
-| `notebooks/workflow_data_training_optimisation_notebook.ipynb` | Interactive walkthrough of the full workflow. |
+| `notebooks/sample_workflow.ipynb` | **Start here.** Beginner-friendly notebook; all stages; no config edits needed. |
+| `notebooks/workflow_data_training_optimisation_notebook.ipynb` | Full interactive walkthrough (older; requires editing `REPO_DIR`). |
 
 </details>
 
@@ -121,7 +123,24 @@ $env:PYTHONPATH = "$PWD\src;$PWD\configs;$env:PYTHONPATH"
 
 ---
 
-## Quick start (one command)
+## Quick start
+
+### Option A — Sample notebook (easiest, interactive)
+
+The simplest way to understand and run the full workflow is the sample notebook.
+Open it and run all cells from top to bottom — no config file edits needed.
+
+```bash
+cd surrogate_model_clean
+source .venv/bin/activate
+pip install jupyter ipykernel   # first time only
+jupyter notebook notebooks/sample_workflow.ipynb
+```
+
+The notebook auto-detects the project root and puts all demo outputs under
+`results/sample_workflow/`.  It runs in under two minutes on a laptop CPU.
+
+### Option B — Quick-test script (fastest, terminal)
 
 Runs the full pipeline in ~10 seconds on CPU.  No config edits needed.
 
@@ -362,9 +381,21 @@ result_dir = run_optimisation(CFG_OPT)
 
 ## Notebook workflow
 
-`notebooks/workflow_data_training_optimisation_notebook.ipynb` runs all three stages interactively.  Its saved output shows a complete `NODES=4` run on CPU.
+### `notebooks/sample_workflow.ipynb` — recommended starting point
 
-Edit `REPO_DIR` in the first code cell before running:
+A clean, beginner-friendly notebook that auto-detects the project root and
+requires no config file edits.  All output goes to `results/sample_workflow/`.
+
+```bash
+jupyter notebook notebooks/sample_workflow.ipynb
+# or
+jupyter lab notebooks/sample_workflow.ipynb
+```
+
+### `notebooks/workflow_data_training_optimisation_notebook.ipynb` — full walkthrough
+
+Runs all three stages interactively with more detail.  Requires editing `REPO_DIR`
+in the first code cell:
 
 ```python
 REPO_DIR = Path("/path/to/surrogate_model_clean")
