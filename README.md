@@ -519,6 +519,41 @@ JAX tried to use a CUDA plugin that doesn't match the available CUDA libraries. 
 
 ---
 
+## Plotting code and data
+
+<details>
+<summary>Reproduce manuscript figures from plotting_code/</summary>
+
+The `plotting_code/` folder contains the notebooks and processed data used to
+reproduce the figures shown in the manuscript/project.
+
+| Notebook | What it produces |
+|----------|-----------------|
+| `training_curves.ipynb` | PNN vs FNN training loss dynamics for 4-, 6-, and 8-node systems (log-scale; colour and greyscale variants) |
+| `testing_hist.ipynb` | Per-sample MAE distribution on the held-out test set for each node count |
+| `jacobian.ipynb` | Jacobian sensitivity heatmaps comparing PNN and PyTheus input→output sensitivities, plus their absolute difference |
+| `runtime.ipynb` | Runtime comparison between direct PyTheus search and surrogate-guided optimisation across GHZ, W, and LC targets |
+| `initial_to_final_fid.ipynb` | 3×3 grid of initial vs final fidelity histograms for all target-state and node-count combinations |
+
+`plotting_code/Data/` contains pre-computed results (training logs, test MAE arrays, Jacobian matrices, runtime measurements, optimisation summaries). `plotting_code/Results/` contains the final generated figures.
+
+This folder is **separate from the main demo workflow**. The quick-test script and sample notebook show a small end-to-end run; `plotting_code/` reproduces analysis figures from full-scale production runs.
+
+To regenerate the plots:
+
+```bash
+cd plotting_code
+jupyter notebook
+```
+
+Open each notebook and run all cells top to bottom. All paths are relative to
+`plotting_code/` — no `PYTHONPATH` changes needed. Only `numpy` and `matplotlib`
+are required.
+
+</details>
+
+---
+
 ## Citation / License
 
 This code is released under the MIT License — see [LICENSE](LICENSE).

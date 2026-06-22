@@ -1,0 +1,37 @@
+{
+  "node": 8,
+  "model_type": "HNN",
+  "samples": 1000,
+  "data_seed": 4,
+  "normed_data": true,
+  "level_ratios": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "architecture": [
+    15000
+  ],
+  "model_path": "/home/bo48god/quick_tests/Experiment_data_collection/Models_11_05_26/params_8node_HNN.msgpack",
+  "input_dim": 112,
+  "out_dim": 256,
+  "mae_mean": 9.568607492838055e-05,
+  "mae_std": 9.365873665956315e-06,
+  "mae_mean_minus_std": 8.632020126242423e-05,
+  "mae_mean_plus_std": 0.00010505194859433686,
+  "mae_median": 9.515481360722333e-05,
+  "mae_min": 7.069557614158839e-05,
+  "mae_max": 0.00012749302550219,
+  "histogram_png_path": "hnn_model_testing_results/n_8/mae_distribution_n8.png",
+  "histogram_pdf_path": "hnn_model_testing_results/n_8/mae_distribution_n8.pdf",
+  "mae_values_path": "hnn_model_testing_results/n_8/mae_values_n8.npy"
+}

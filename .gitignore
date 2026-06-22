@@ -52,3 +52,10 @@ plots/
 *.out
 *.err
 check_runs.log
+
+# ---------------------------------------------------------------------------
+# Plotting code — temporary / build artefacts
+# ---------------------------------------------------------------------------
+executed_*.ipynb
+*.aux
+missfont.log

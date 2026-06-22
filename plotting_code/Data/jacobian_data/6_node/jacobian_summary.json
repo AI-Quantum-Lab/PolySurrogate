@@ -1,0 +1,18 @@
+{
+  "nphotons": 6,
+  "target_name": "all",
+  "model_type": "HNN",
+  "model_path": "/home/bo48god/quick_tests/Experiment_data_collection/Models_11_05_26/run_HNN_6_MAE_20M_cosine_decay_ara/params.msgpack",
+  "conditioned_data_path": "/home/bo48god/quick_tests/data_unnormalised/n6_20M/dataset_merged.npz",
+  "num_samples": 10000,
+  "input_dim": 60,
+  "out_dim": 64,
+  "jacobian_shape": [
+    64,
+    60
+  ],
+  "use_absolute_jacobian": true,
+  "correlation_nn_vs_pytheus": 0.999999996943351,
+  "mean_absolute_sensitivity_difference": 1.413377844983188e-06,
+  "max_absolute_sensitivity_difference": 1.461803913116455e-05
+}

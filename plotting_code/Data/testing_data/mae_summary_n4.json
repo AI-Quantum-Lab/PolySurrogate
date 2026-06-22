@@ -1,0 +1,37 @@
+{
+  "node": 4,
+  "model_type": "HNN",
+  "samples": 1000,
+  "data_seed": 4,
+  "normed_data": true,
+  "level_ratios": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "architecture": [
+    400
+  ],
+  "model_path": "/home/bo48god/quick_tests/Experiment_data_collection/Models_11_05_26/run_HNN_4_MAE_20M_cosine_decay_ara/params.msgpack",
+  "input_dim": 24,
+  "out_dim": 16,
+  "mae_mean": 3.646287723313435e-06,
+  "mae_std": 1.0103292424901156e-06,
+  "mae_mean_minus_std": 2.6359584808233194e-06,
+  "mae_mean_plus_std": 4.6566169658035506e-06,
+  "mae_median": 3.5347475204616785e-06,
+  "mae_min": 1.522304955869913e-06,
+  "mae_max": 9.11438837647438e-06,
+  "histogram_png_path": "hnn_model_testing_results/n_4/mae_distribution_n4.png",
+  "histogram_pdf_path": "hnn_model_testing_results/n_4/mae_distribution_n4.pdf",
+  "mae_values_path": "hnn_model_testing_results/n_4/mae_values_n4.npy"
+}
