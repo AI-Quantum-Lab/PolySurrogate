@@ -376,22 +376,34 @@ def build_forward_metrics(apply_fn, params, cfg: Dict[str, Any]):
     Preserved objective:
         loss = 1 - fidelity + lambda_l1 * sum(abs(x))
 
-    If cfg['normalize_model_output'] is True, the surrogate prediction is
-    normalized before fidelity/MAE computation.
+    Fidelity is always computed from L2-normalised vectors so that fid ∈ [0, 1]
+    regardless of cfg['normalize_model_output'].  Without this guarantee, an
+    unnormalised PNN output with ‖y_pred‖ > 1 can make fid exceed 0.9999 and
+    trigger a false early-stop within ~30 steps, while the true PyTheus fidelity
+    is only ~0.67.
+
+    cfg['normalize_model_output'] still controls which vectors are used for MAE:
+      True  → MAE between normalised prediction and normalised target.
+      False → MAE between raw (unnormalised) prediction and raw target.
     """
 
     def _forward_metrics(x, y_target):
         y_pred = apply_fn(params, x)
 
-        if cfg.get("normalize_model_output", True):
-            y_pred = normalize_vector_jax(y_pred)
-            y_target_used = normalize_vector_jax(y_target)
-        else:
-            y_target_used = y_target
+        # Normalised vectors used for fidelity (always) and for MAE when flag is True.
+        y_pred_norm   = normalize_vector_jax(y_pred)
+        y_target_norm = normalize_vector_jax(y_target)
 
-        l1 = cfg["lambda_l1"] * jnp.sum(jnp.abs(x))
-        fid = jnp.abs(jnp.vdot(y_pred, y_target_used)) ** 2
-        mae = jnp.mean(jnp.abs(jnp.abs(y_pred) - jnp.abs(y_target_used)))
+        if cfg.get("normalize_model_output", True):
+            y_pred_for_mae   = y_pred_norm
+            y_target_for_mae = y_target_norm
+        else:
+            y_pred_for_mae   = y_pred
+            y_target_for_mae = y_target
+
+        l1  = cfg["lambda_l1"] * jnp.sum(jnp.abs(x))
+        fid = jnp.abs(jnp.vdot(y_pred_norm, y_target_norm)) ** 2
+        mae = jnp.mean(jnp.abs(jnp.abs(y_pred_for_mae) - jnp.abs(y_target_for_mae)))
         loss = (1.0 - fid) + l1
 
         return loss, y_pred, fid, mae, l1
