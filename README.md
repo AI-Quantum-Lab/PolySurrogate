@@ -31,6 +31,23 @@ The pipeline has three stages:
 
 ---
 
+## Table of contents
+
+- [Repository structure](#repository-structure)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Configuration](#configuration)
+- [Data generation](#data-generation)
+- [Model training](#model-training)
+- [Inverse design optimisation](#inverse-design-optimisation)
+- [Expected outputs](#expected-outputs)
+- [Files not tracked by Git](#files-not-tracked-by-git)
+- [Troubleshooting](#troubleshooting)
+- [Plotting code and data](#plotting-code-and-data)
+- [Citation / License](#citation--license)
+
+---
+
 ## Repository structure
 
 ```text
