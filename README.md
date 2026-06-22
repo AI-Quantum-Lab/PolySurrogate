@@ -12,27 +12,8 @@ The pipeline has three stages:
 2. **Model training** — train a surrogate PNN (Polynomial Neural Network) to learn the graph-weights → unnormalised amplitude map.
 3. **Inverse design optimisation** — use the trained surrogate to optimise graph weights toward a target state (GHZ, W, linear-cluster, …), verified against PyTheus and pruned to a sparse graph.
 
----
-
-## Table of contents
-
-- [Glossary](#glossary)
-- [Repository structure](#repository-structure)
-- [Installation](#installation)
-- [Quick start (one command)](#quick-start)
-- [Configuration](#configuration)
-- [Data generation](#data-generation)
-- [Model training](#model-training)
-- [Inverse design optimisation](#inverse-design-optimisation)
-- [Notebook workflow](#notebook-workflow)
-- [Expected outputs](#expected-outputs)
-- [Files not tracked by Git](#files-not-tracked-by-git)
-- [Troubleshooting](#troubleshooting)
-- [Citation / License](#citation--license)
-
----
-
-## Glossary
+<details>
+<summary>Glossary — PNN, fidelity, GHZ, PyTheus, …</summary>
 
 | Term | Meaning |
 |------|---------|
@@ -46,40 +27,30 @@ The pipeline has three stages:
 | **PyTheus** | A graph-state source enumeration library that computes the exact quantum amplitude vector for a given photonic graph via perfect-matching catalogues. Installed from PyPI as `pytheusQ`. |
 | **Inverse design** | Searching (optimising) over graph weights to find a configuration whose quantum state matches a desired target state. |
 
+</details>
+
 ---
 
 ## Repository structure
 
 ```text
 surrogate_model_clean/
-├── configs/
-│   ├── __init__.py
-│   ├── data_config.py          ← data generation settings
-│   ├── training_config.py      ← model training settings
-│   └── optimiser_config.py     ← inverse design settings
+├── configs/            ← all user-facing settings (edit these)
+│   ├── data_config.py
+│   ├── training_config.py
+│   └── optimiser_config.py
 ├── notebooks/
 │   └── sample_workflow.ipynb   ← start here
 ├── scripts/
 │   └── run_quick_test.py       ← one-command full-pipeline test
-├── src/
-│   ├── __init__.py
-│   ├── data_generation.py
-│   ├── data_generation_utils.py
-│   ├── model_training.py
-│   ├── model_training_utils.py
-│   ├── models.py
-│   ├── optimiser.py
-│   ├── optimisation_utils.py
-│   └── target_states.py
+├── src/                ← core library (no edits needed for standard runs)
 ├── LICENSE
-├── WORKFLOW.md                 ← detailed workflow description
-├── .gitignore
-├── requirements.txt
-└── README.md
+├── WORKFLOW.md         ← detailed walkthrough for new users
+└── requirements.txt
 ```
 
 <details>
-<summary>File reference</summary>
+<summary>Full file reference</summary>
 
 | File | Purpose |
 |------|---------|
@@ -145,9 +116,6 @@ $env:PYTHONPATH = "$PWD\src;$PWD\configs;$env:PYTHONPATH"
 
 ### Option A — Sample notebook (easiest, interactive)
 
-The simplest way to understand and run the full workflow is the sample notebook.
-Open it and run all cells from top to bottom — no config file edits needed.
-
 ```bash
 cd surrogate_model_clean
 source .venv/bin/activate
@@ -155,20 +123,18 @@ pip install jupyter ipykernel   # first time only
 jupyter notebook notebooks/sample_workflow.ipynb
 ```
 
-The notebook auto-detects the project root and puts all demo outputs under
-`results/sample_workflow/`.  It runs in under two minutes on a laptop CPU.
+Open and run all cells top to bottom — no config edits needed.  Outputs go to `results/sample_workflow/`.  Runs in under two minutes on a laptop CPU.
 
 ### Option B — Quick-test script (fastest, terminal)
 
-Runs the full pipeline in ~10 seconds on CPU.  No config edits needed.
-
 ```bash
 cd surrogate_model_clean
-source .venv/bin/activate   # or activate your environment
+source .venv/bin/activate
 PYTHONPATH="$PWD/src:$PWD/configs" python scripts/run_quick_test.py
 ```
 
-Expected output:
+<details>
+<summary>Expected terminal output</summary>
 
 ```text
 surrogate_model_clean — quick end-to-end smoke test
@@ -204,17 +170,18 @@ surrogate_model_clean — quick end-to-end smoke test
 ============================================================
 ```
 
+</details>
+
 > **Low fidelity in the demo is expected.** The quick test uses 200 samples, 10 epochs, and 10 optimisation steps — far too few for meaningful results. The goal is to verify the pipeline runs end-to-end. For real results use the notebook (500 samples, 15 epochs) or the full production pipeline.
 
 ---
 
 ## Configuration
 
-All user-facing settings are in `configs/`.  You should not need to open any `src/` file for a standard run.
+All user-facing settings are in `configs/`.  The configs ship with **smoke-test defaults** (4 nodes, small sample counts, relative paths) that work out of the box.  Each file also contains a commented-out production block for large HPC runs.
 
-The configs ship with **smoke-test defaults** (4 nodes, small sample counts, relative paths) that work out of the box.  Each file also contains a commented-out production block for large HPC runs.
-
-### `configs/data_config.py` — Data generation
+<details>
+<summary>data_config.py — data generation parameters</summary>
 
 | Setting | Default | Meaning |
 |---------|---------|---------|
@@ -226,9 +193,12 @@ The configs ship with **smoke-test defaults** (4 nodes, small sample counts, rel
 | `SAVE_TO_FILE` | `True` | Write `.npz` shards to disk. |
 | `OUT_DIR` | `'data/smoke_test'` | Output folder (relative to project root). |
 | `SHARD_SIZE` | `1000` | Samples per shard file. |
-| `NORMED_DATA` | `False` | `False` (default) → store raw unnormalised amplitude vectors. `True` → L2-normalise before saving. Must match `normed_data` in optimiser config. |
+| `NORMED_DATA` | `False` | `False` → store raw unnormalised amplitude vectors. `True` → L2-normalise before saving. Must match `normed_data` in optimiser config. |
 
-### `configs/training_config.py` — Model training
+</details>
+
+<details>
+<summary>training_config.py — model training parameters</summary>
 
 | Setting | Default | Meaning |
 |---------|---------|---------|
@@ -245,7 +215,10 @@ The configs ship with **smoke-test defaults** (4 nodes, small sample counts, rel
 | `RUN_NAME` | `"PNN_4_smoke_test"` | Run sub-folder name. |
 | `RESUME_FULL_STATE` | `False` | Set `True` to resume from `CKPT_DIR_RESTORE`. |
 
-### `configs/optimiser_config.py` — Inverse design
+</details>
+
+<details>
+<summary>optimiser_config.py — inverse design parameters</summary>
 
 | Setting | Default | Meaning |
 |---------|---------|---------|
@@ -262,9 +235,10 @@ The configs ship with **smoke-test defaults** (4 nodes, small sample counts, rel
 | `results_root` | `"optimiser_results"` | Output root folder. |
 | `store_step_vectors` | `False` | `True` stores gradients per step (large files; use for debugging only). |
 
-### Normalisation note
+</details>
 
-There are **two independent flags** — they are not required to have the same value:
+<details>
+<summary>Normalisation note — two independent flag pairs</summary>
 
 | Flag | Controls |
 |------|---------|
@@ -276,14 +250,15 @@ There are **two independent flags** — they are not required to have the same v
 - `NORMALIZE_MODEL_OUTPUT` (training config) **must** equal `normalize_model_output` (optimiser config).
 - The two pairs are **independent** of each other.
 
-Default setting: both pairs are `False`. The model is trained to predict raw unnormalised amplitude vectors.
+Default: both pairs are `False`. The model is trained to predict raw unnormalised amplitude vectors.
+
+</details>
 
 ---
 
 ## Data generation
 
 ```bash
-# PYTHONPATH must include src/ and configs/ — set it in the Installation step
 # Edit configs/data_config.py first (or use defaults for smoke test)
 python src/data_generation.py
 
@@ -419,21 +394,6 @@ result_dir = run_optimisation(CFG_OPT)
 
 ---
 
-## Notebook workflow
-
-### `notebooks/sample_workflow.ipynb` — recommended starting point
-
-A clean, beginner-friendly notebook that auto-detects the project root and
-requires no config file edits.  All output goes to `results/sample_workflow/`.
-
-```bash
-jupyter notebook notebooks/sample_workflow.ipynb
-# or
-jupyter lab notebooks/sample_workflow.ipynb
-```
-
----
-
 ## Expected outputs
 
 <details>
@@ -493,7 +453,8 @@ optimiser_results/GHZ_4_smoke_test/
 
 ## Files not tracked by Git
 
-The `.gitignore` excludes all generated outputs.  These are local and must not be committed:
+<details>
+<summary>Gitignored patterns — generated outputs (do not commit)</summary>
 
 | Pattern | What it covers |
 |---------|---------------|
@@ -506,9 +467,14 @@ The `.gitignore` excludes all generated outputs.  These are local and must not b
 | `*.log`, `*.out`, `*.err` | Log files |
 | `.venv/`, `__pycache__/` | Environment and bytecode |
 
+</details>
+
 ---
 
 ## Troubleshooting
+
+<details>
+<summary>Common issues and fixes</summary>
 
 **`ModuleNotFoundError: No module named 'pytheus'`**  
 Run `pip install pytheusQ`, not `pip install pytheus`.
@@ -548,6 +514,8 @@ They do not need to equal each other.
 
 **`Jax plugin configuration error` / `cuInit failed` on startup**  
 JAX tried to use a CUDA plugin that doesn't match the available CUDA libraries.  Non-fatal — it falls back to CPU automatically.  Install a matching JAX/CUDA build to use a GPU.
+
+</details>
 
 ---
 
