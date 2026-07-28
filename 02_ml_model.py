@@ -1,66 +1,32 @@
-"""
-02_ml_model.py -- Stage 2: train a PNN/FNN surrogate model.
+"""Reproducible JAX surrogate training. Validation every epoch. No plotting."""
 
-Imports shared model definitions and reproducibility primitives from
-utils.py (also used by 03_inverse_design.py); everything stage-specific
-(parameters, data loading/splitting, the training loop, checkpoint I/O)
-lives in this file. Edit the constants in the "Parameters" section below,
-then run:
-
-    python 02_ml_model.py
-
-Reads DATA_PATH (the `dataset_merged.npz` written by 01_data_generate.py --
-connected only through that file, not through a Python import). Writes
-checkpoints, plots, `params.msgpack`, `model_info.json`, and a
-`reproducibility_manifest.json` under an auto-numbered run folder:
-    <ROOT_FOLDER>/<MODEL_NAME>/n<NODES>/n<NODES>_<i>/
-where `i` is the next free integer for that (model, node-count) pair --
-never user-typed, computed the same way 01_data_generate.py numbers its
-own output folders. Stage 3 (03_inverse_design.py) reads `params.msgpack`
-from whatever folder train_surrogate_model() actually returns.
-"""
-
-# =============================================================================
-# Bootstrap -- MUST run before the first `import jax` in this process
-# (including transitively, via `import utils`, which itself imports jax).
-# XLA backend init is lazy (triggered by the first device query/op), so
-# setting XLA_FLAGS here still works as long as nothing above this point has
-# touched jax -- but the only fully reliable way to guarantee this across
-# all launch scenarios is to export XLA_FLAGS in the shell/sbatch script
-# before launching python at all. See REPRODUCIBILITY_TRAINING.md. This is
-# the one piece of logic that legitimately cannot move into utils.py:
-# importing utils.py would itself trigger `import jax` before this flag is set.
-# =============================================================================
-
-import json
 import os
 
-DETERMINISTIC_XLA = True  # best-effort request; see note above
-
+DETERMINISTIC_XLA = True
 if DETERMINISTIC_XLA:
-    _flag = "--xla_gpu_deterministic_ops=true"
-    _current = os.environ.get("XLA_FLAGS", "")
-    if _flag not in _current:
-        os.environ["XLA_FLAGS"] = (_current + " " + _flag).strip()
+    flag = "--xla_gpu_deterministic_ops=true"
+    current = os.environ.get("XLA_FLAGS", "")
+    if flag not in current:
+        os.environ["XLA_FLAGS"] = f"{current} {flag}".strip()
 
+import json
+import logging
+import sys
 import time
+from functools import partial
 from pathlib import Path
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-import matplotlib.pyplot as plt
-from flax.training import train_state, checkpoints
+from flax.training import checkpoints, train_state
 
 from utils import (
     build_manifest,
     configure_precision,
     create_model,
-    derive_root_keys,
-    deterministic_xla_env_is_set,
     dtype_for_precision,
-    epoch_key_for,
     hash_array,
     hash_file,
     save_params_msgpack,
@@ -70,706 +36,764 @@ from utils import (
 
 
 # =============================================================================
-# Parameters -- edit these directly, no external config file involved.
+# 1. PARAMETERS
 # =============================================================================
 
-NODES = 4
-DIMENSIONS = 2
-DATE = "smoke_test"
-
-MODEL_NAME = "PNN"      # "FNN" or "PNN"
-# PNN (Polynomial Neural Network): integer hidden dimension.
-# FNN (Feedforward Neural Network): tuple, e.g. (2000, 2000, 2000).
-HIDDEN_DIM = 400
-
-# Path to the merged .npz produced by 01_data_generate.py.
-DATA_PATH = "results/data_generation/n4/n4_0/dataset_merged.npz"
-DATA_SIZE = None        # None -> use the full dataset
-
-# Controls whether the model output is L2-normalised *inside the loss
-# function* before computing MAE. Must match `normalize_model_output` used
-# in 03_inverse_design.py for correct fidelity evaluation with this model.
+NODES = 8
+MODEL_NAME = "PNN"                 # "PNN" or "FNN"
+HIDDEN_DIM = 15000   # FNN example: (2000, 2000, 2000)
 NORMALIZE_MODEL_OUTPUT = False
 
+DATA_PATH = "/home/bo48god/quick_tests/data_unnormalised/n8_20M/dataset_merged.npz"
+DATA_SIZE = 10_000_000     # reduced from full 20M -- full size OOM'd on 40GB A100 (needed >40GB actual GPU mem vs ~26.5GB estimate); 10M gives ~13.2GB train+val on GPU, safe margin
 TRAIN_SPLIT = 0.8
 VAL_SPLIT = 0.1
 TEST_SPLIT = 0.1
 
-LEARNING_RATE = 1e-3
-LR_AFTER_DECAY = 1e-5
-LR_DECAY_UNTIL_EPOCH = 20    # smoke test: matches NUM_EPOCHS
+# "shuffled" (default, original behavior of this file): seeded
+# jax.random.permutation split. "contiguous": first TRAIN_SPLIT fraction ->
+# train, next VAL_SPLIT -> val, rest -> test, no randomness at all. Added
+# specifically to A/B test how much the historical unseeded-shuffle
+# split (which can't be recovered) actually matters for the loss
+# trajectory, by comparing against this seeded code with everything else
+# held fixed.
+SPLIT_MODE = "contiguous"    # "shuffled" or "contiguous"
 
-BATCH_SIZE = 100
-NUM_EPOCHS = 20
-PATIENCE = 10
+LEARNING_RATE = 1e-3
+FINAL_LEARNING_RATE = 1e-5
+LR_DECAY_UNTIL_EPOCH = 2000
+WEIGHT_DECAY = 1e-4
+BATCH_SIZE = 8000
+NUM_EPOCHS = 10
+PATIENCE = 100000
 TOLERANCE = 1e-7
 
-# SEED is the single master seed for the entire run. Every PRNG key used
-# anywhere (model init, dataset split, epoch shuffling, and a reserved slot
-# for dropout/other stochastic layers if any are added later) is
-# independently derived from this one value via fold_in (see
-# utils.derive_root_keys) -- never via sequential split(), so resuming a run
-# reproduces exactly the same future key sequence an uninterrupted run
-# would have used.
-SEED = 159
+SEED = 158
+PRECISION = "float32"              # "float32" or "float64"
+DATASET_HASH_MODE = "fast"         # "full", "fast", or "none"
 
-# "contiguous" (default): first TRAIN_SPLIT fraction -> train, next VAL_SPLIT
-# -> val, last TEST_SPLIT -> test. No randomness, always reproducible.
-# "shuffled": indices permuted via a seed-derived key before splitting.
-SPLIT_MODE = "contiguous"
-
-# "float32" (default) or "float64" (jax_enable_x64, slower/more memory).
-PRECISION = "float32"
-
-# "fast" (default, cheap size/mtime + first/last 1MB hash), "full" (sha256
-# of the entire file, slow for multi-GB datasets), or "none".
-DATASET_HASH_MODE = "fast"
-
-# If True, writes <run_dir>/trace.jsonl with one compact record per epoch
-# (batch-index hash, LR, losses, params/opt_state hashes, PRNG key hash).
-DEBUG_TRACE = False
-
-# Set RESUME_FULL_STATE=True and point CKPT_DIR_RESTORE at an existing
-# checkpoints/ folder to resume a previous run.
-RESUME_FULL_STATE = False
-CKPT_DIR_RESTORE = "results/model_training/PNN/n4/n4_0/checkpoints"
-
-# Outputs are written to <ROOT_FOLDER>/<MODEL_NAME>/n<NODES>/n<NODES>_<i>/,
-# where <i> is auto-numbered (see _next_run_dir) -- no user-typed run name.
 ROOT_FOLDER = "results/model_training"
-LOSS_NAME = "mae"
+RESUME_RUN_DIR = None              # Existing run directory, or None
+CHECKPOINT_EVERY = 1               # 1 = latest checkpoint after every epoch
+KEEP_LATEST_CHECKPOINTS = 1        # overwrite/remove older latest checkpoint
 
-CHECKPOINT_SCHEMA_VERSION = 2
-REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+CONFIG = {
+    "nodes": NODES,
+    "model_name": MODEL_NAME,
+    "hidden_dim": HIDDEN_DIM,
+    "normalize_model_output": NORMALIZE_MODEL_OUTPUT,
+    "data_path": DATA_PATH,
+    "data_size": DATA_SIZE,
+    "train_split": TRAIN_SPLIT,
+    "val_split": VAL_SPLIT,
+    "test_split": TEST_SPLIT,
+    "split_mode": SPLIT_MODE,
+    "learning_rate": LEARNING_RATE,
+    "final_learning_rate": FINAL_LEARNING_RATE,
+    "lr_decay_until_epoch": LR_DECAY_UNTIL_EPOCH,
+    "weight_decay": WEIGHT_DECAY,
+    "batch_size": BATCH_SIZE,
+    "num_epochs": NUM_EPOCHS,
+    "patience": PATIENCE,
+    "tolerance": TOLERANCE,
+    "seed": SEED,
+    "precision": PRECISION,
+    "dataset_hash_mode": DATASET_HASH_MODE,
+    "deterministic_xla": DETERMINISTIC_XLA,
+    "checkpoint_every": CHECKPOINT_EVERY,
+    "keep_latest_checkpoints": KEEP_LATEST_CHECKPOINTS,
+}
 
 configure_precision(PRECISION)
 
+# Explicitly request the fastest matmul precision mode for float32 (allows
+# TF32 tensor-core execution on Ampere+ GPUs). Investigated because the
+# float32 6FNN run was empirically SLOWER than the float64 one on A100 with
+# --xla_gpu_deterministic_ops=true set -- suspected cause: without an
+# explicit precision request, XLA's kernel selection under deterministic
+# mode was not taking the fast TF32 path for float32 matmuls, while A100's
+# native FP64 tensor cores gave float64 a real hardware advantage instead.
+# Scoped to this file only (not utils.py), since utils.py is shared by
+# 02_ml_model.py, whose established reproducibility comparisons (fold_in
+# vs split, CPU vs GPU) should not have their numerics touched by this.
+if PRECISION == "float32":
+    jax.config.update("jax_default_matmul_precision", "default")
+
 
 # =============================================================================
-# Run-folder / logging / plotting
+# 2. RUN DIRECTORY, LOGGER, AND NPY HISTORY
 # =============================================================================
 
+HISTORY_DTYPE = np.dtype([
+    ("epoch", np.int64),
+    ("step", np.int64),
+    ("learning_rate", np.float64),
+    ("train_loss", np.float64),
+    ("validation_loss", np.float64),
+    ("best_validation_loss", np.float64),
+    ("best_epoch", np.int64),
+    ("wait", np.int64),
+    ("shuffle_seconds", np.float64),
+    ("train_seconds", np.float64),
+    ("validation_seconds", np.float64),
+    ("best_checkpoint_seconds", np.float64),
+    ("latest_checkpoint_seconds", np.float64),
+    ("metrics_flush_seconds", np.float64),
+    ("epoch_compute_seconds", np.float64),
+    ("epoch_wall_seconds", np.float64),
+    ("latest_checkpoint_saved", np.bool_),
+    ("best_checkpoint_saved", np.bool_),
+])
 
-def _next_run_dir(root_folder: str, model_name: str, nodes: int) -> Path:
-    parent = Path(root_folder) / model_name / f"n{nodes}"
+
+def next_run_dir() -> Path:
+    parent = Path(ROOT_FOLDER) / MODEL_NAME / f"n{NODES}"
     parent.mkdir(parents=True, exist_ok=True)
-    i = 0
-    while (parent / f"n{nodes}_{i}").exists():
-        i += 1
-    return parent / f"n{nodes}_{i}"
+    index = 0
+    while (parent / f"n{NODES}_{index}").exists():
+        index += 1
+    return (parent / f"n{NODES}_{index}").resolve()
 
 
-def create_run_dirs(root_folder: str, model_name: str, nodes: int):
-    run_dir = _next_run_dir(root_folder, model_name, nodes)
-    run_dir.mkdir(parents=True, exist_ok=True)
+def prepare_run() -> tuple[Path, bool]:
+    if RESUME_RUN_DIR is None:
+        run_dir = next_run_dir()
+        run_dir.mkdir(parents=True)
+        return run_dir, False
 
-    ckpt_dir = (run_dir / "checkpoints").resolve()
-    plot_dir = run_dir / "plots"
-    snap_dir = run_dir / "params_snapshots"
-    ckpt_dir.mkdir(parents=True, exist_ok=True)
-    plot_dir.mkdir(parents=True, exist_ok=True)
-    snap_dir.mkdir(parents=True, exist_ok=True)
-
-    log_file_path = run_dir / "run_log.txt"
-    log_file_path.write_text("Training about to start!\n")
-    return run_dir, ckpt_dir, plot_dir, snap_dir, log_file_path
+    run_dir = Path(RESUME_RUN_DIR).expanduser().resolve()
+    if not run_dir.exists():
+        raise FileNotFoundError(f"Run directory not found: {run_dir}")
+    return run_dir, True
 
 
-def log_file(path: Path, txt):
-    if not isinstance(txt, str):
-        txt = np.array2string(np.asarray(txt))
-    with path.open("a") as f:
-        f.write(txt + "\n")
+def make_logger(path: Path) -> logging.Logger:
+    logger = logging.getLogger("training")
+    logger.setLevel(logging.INFO)
+    logger.handlers.clear()
+    logger.propagate = False
+    formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    for handler in (logging.FileHandler(path, mode="a"), logging.StreamHandler(sys.stdout)):
+        handler.setFormatter(formatter)
+        logger.addHandler(handler)
+    return logger
 
 
-def save_training_plot(epochs, train_losses, val_losses, plot_path, loss_name, title):
-    plt.figure()
-    plt.plot(epochs, train_losses, label="Training loss")
-    plt.plot(epochs, val_losses, label="Validation loss")
-    plt.xlabel("Epoch")
-    plt.ylabel(f"Loss ({loss_name})")
-    plt.legend()
-    plt.grid(True)
-    plt.title(title)
-    plt.savefig(plot_path, dpi=300, bbox_inches="tight")
-    plt.close()
+def validate_resume_config(run_dir: Path) -> None:
+    path = run_dir / "config.json"
+    if not path.exists():
+        raise FileNotFoundError(f"Missing resume configuration: {path}")
+    with path.open("r", encoding="utf-8") as file:
+        saved = json.load(file)
+    current = json.loads(json.dumps(CONFIG))
+    if saved != current:
+        differences = {
+            key: {"saved": saved.get(key), "current": current.get(key)}
+            for key in sorted(set(saved) | set(current))
+            if saved.get(key) != current.get(key)
+        }
+        raise ValueError(f"Resume configuration differs: {differences}")
 
 
-def save_test_plot(fid_list, plot_path, title):
-    plt.figure()
-    plt.plot(range(len(fid_list)), fid_list, label="Fidelity")
-    plt.xlabel("Test sample")
-    plt.ylabel("Fidelity")
-    plt.legend()
-    plt.grid(True)
-    plt.title(title)
-    plt.savefig(plot_path, dpi=300, bbox_inches="tight")
-    plt.close()
+def initialise_history(history) -> None:
+    history[:] = np.zeros(history.shape, dtype=HISTORY_DTYPE)
+    for name in ("epoch", "step", "best_epoch", "wait"):
+        history[name] = -1
+    for name in HISTORY_DTYPE.names:
+        if np.issubdtype(HISTORY_DTYPE[name], np.floating):
+            history[name] = np.nan
+    history.flush()
+
+
+def open_history(path: Path, resuming: bool):
+    if resuming and path.exists():
+        history = np.lib.format.open_memmap(path, mode="r+")
+        if history.dtype != HISTORY_DTYPE or history.shape != (NUM_EPOCHS,):
+            raise ValueError("training_history.npy is incompatible with this configuration")
+        return history
+
+    history = np.lib.format.open_memmap(
+        path, mode="w+", dtype=HISTORY_DTYPE, shape=(NUM_EPOCHS,)
+    )
+    initialise_history(history)
+    return history
+
+
+def clear_history_after(history, start_epoch: int) -> None:
+    if start_epoch >= NUM_EPOCHS:
+        return
+    initialise = np.zeros(NUM_EPOCHS - start_epoch, dtype=HISTORY_DTYPE)
+    initialise["epoch"] = -1
+    initialise["step"] = -1
+    initialise["best_epoch"] = -1
+    initialise["wait"] = -1
+    for name in HISTORY_DTYPE.names:
+        if np.issubdtype(HISTORY_DTYPE[name], np.floating):
+            initialise[name] = np.nan
+    history[start_epoch:] = initialise
+    history.flush()
+
+
+def update_history(history, epoch: int, values: dict) -> None:
+    for name, value in values.items():
+        history[name][epoch] = value
 
 
 # =============================================================================
-# Data loading
+# 3. DATA
 # =============================================================================
 
+def load_dataset(path: str, n_samples: int | None):
+    target_dtype = np.float64 if PRECISION == "float64" else np.float32
+    with np.load(path, mmap_mode="r") as data:
+        if "weights" in data and "amps" in data:
+            x_source, y_source = data["weights"], data["amps"]
+        elif "X" in data and "Y" in data:
+            x_source, y_source = data["X"], data["Y"]
+        else:
+            raise KeyError("Dataset must contain weights/amps or X/Y")
 
-def load_npz_dataset(dataset_path: str, n_samples=None):
-    with np.load(dataset_path, mmap_mode="r") as data:
-        X = data["weights"] if "weights" in data else data["X"]
-        Y = data["amps"] if "amps" in data else data["Y"]
+        source_dtypes = {
+            "input_dtype": str(x_source.dtype),
+            "target_dtype": str(y_source.dtype),
+        }
         if n_samples is not None:
-            X = X[:n_samples]
-            Y = Y[:n_samples]
-        return np.asarray(X, dtype=np.float32), np.asarray(Y, dtype=np.float32)
+            x_source, y_source = x_source[:n_samples], y_source[:n_samples]
+        x = np.asarray(x_source, dtype=target_dtype)
+        y = np.asarray(y_source, dtype=target_dtype)
+
+    return x, y, source_dtypes
 
 
-def load_and_split_dataset(dataset_path, n_samples, train_split, val_split, test_split,
-                            split_mode="contiguous", split_key=None):
-    if abs((train_split + val_split + test_split) - 1.0) > 1e-8:
-        raise ValueError("train_split + val_split + test_split must equal 1.0")
+def random_reproducible_split(x, y, split_key):
+    if not np.isclose(TRAIN_SPLIT + VAL_SPLIT + TEST_SPLIT, 1.0):
+        raise ValueError("TRAIN_SPLIT + VAL_SPLIT + TEST_SPLIT must equal 1")
 
-    X, Y = load_npz_dataset(dataset_path, n_samples=n_samples)
-    n = X.shape[0]
-    n_train = int(n * train_split)
-    n_val = int(n * val_split)
-    n_test = n - n_train - n_val
+    n = x.shape[0]
+    n_train = int(n * TRAIN_SPLIT)
+    n_val = int(n * VAL_SPLIT)
 
-    if split_mode == "contiguous":
-        train_idx = np.arange(0, n_train)
-        val_idx = np.arange(n_train, n_train + n_val)
-        test_idx = np.arange(n_train + n_val, n_train + n_val + n_test)
-        split_info = {
-            "mode": "contiguous", "n_total": n, "n_train": n_train, "n_val": n_val, "n_test": n_test,
-            "train_range": [0, n_train], "val_range": [n_train, n_train + n_val],
-            "test_range": [n_train + n_val, n_train + n_val + n_test],
-        }
-    elif split_mode == "shuffled":
-        if split_key is None:
-            raise ValueError("split_mode='shuffled' requires split_key to be provided.")
-        perm = np.asarray(jax.random.permutation(split_key, n))
-        train_idx = perm[:n_train]
-        val_idx = perm[n_train:n_train + n_val]
-        test_idx = perm[n_train + n_val:n_train + n_val + n_test]
-        split_info = {
-            "mode": "shuffled", "n_total": n, "n_train": n_train, "n_val": n_val, "n_test": n_test,
-            "perm_hash": hash_array(perm),
-        }
+    if SPLIT_MODE == "contiguous":
+        permutation = np.arange(n)
+    elif SPLIT_MODE == "shuffled":
+        permutation = jax.random.permutation(split_key, n)
+        permutation.block_until_ready()
+        permutation = np.asarray(jax.device_get(permutation))
     else:
-        raise ValueError(f"Unknown split_mode: {split_mode!r}. Use 'contiguous' or 'shuffled'.")
+        raise ValueError(f"Unknown SPLIT_MODE: {SPLIT_MODE!r}. Use 'shuffled' or 'contiguous'.")
 
-    return (X[train_idx], Y[train_idx], X[val_idx], Y[val_idx], X[test_idx], Y[test_idx], split_info)
+    return (
+        x[permutation[:n_train]],
+        y[permutation[:n_train]],
+        x[permutation[n_train:n_train + n_val]],
+        y[permutation[n_train:n_train + n_val]],
+        x[permutation[n_train + n_val:]],
+        y[permutation[n_train + n_val:]],
+        permutation,
+    )
 
 
-def load_data_generation_info(data_path: str) -> dict:
-    """Read 01_data_generate.py's reproducibility_manifest.json from next to
-    DATA_PATH (same directory) and pull out its `resolved_config` -- the
-    vertices/n_samples/seed/etc. needed to regenerate this exact dataset from
-    scratch. Stored under this run's own manifest so a lost/hash-mismatched
-    dataset file can still be regenerated, not just detected as changed."""
-    manifest_path = Path(data_path).parent / "reproducibility_manifest.json"
-    if not manifest_path.exists():
-        return {"available": False, "manifest_path": str(manifest_path),
-                "note": "No Stage-1 reproducibility_manifest.json found next to DATA_PATH."}
-    with open(manifest_path) as f:
-        upstream = json.load(f)
+# =============================================================================
+# 4. JITTED TRAINING AND VALIDATION
+# =============================================================================
+
+def normalize_vectors(values, eps=1e-12):
+    norm = jnp.linalg.norm(values, axis=-1, keepdims=True)
+    return values / jnp.where(norm > eps, norm, 1.0)
+
+
+def loss_fn(params, x, y, apply_fn):
+    prediction = apply_fn(params, x)
+    if NORMALIZE_MODEL_OUTPUT:
+        prediction = normalize_vectors(prediction)
+        y = normalize_vectors(y)
+    return jnp.mean(jnp.abs(prediction - y))
+
+
+def train_step(state, x_batch, y_batch):
+    loss, gradients = jax.value_and_grad(loss_fn)(
+        state.params, x_batch, y_batch, state.apply_fn
+    )
+    return state.apply_gradients(grads=gradients), loss
+
+
+@partial(jax.jit, donate_argnums=(0,))
+def train_one_epoch(state, x_train, y_train, batch_indices):
+    def body(current_state, indices):
+        next_state, batch_loss = train_step(
+            current_state, x_train[indices], y_train[indices]
+        )
+        return next_state, batch_loss
+
+    state, losses = jax.lax.scan(body, state, batch_indices)
+    return state, jnp.mean(losses)
+
+
+@partial(jax.jit, static_argnames=("n_samples", "batch_size"))
+def make_epoch_batches(key, n_samples: int, batch_size: int):
+    return jax.random.permutation(key, n_samples).reshape(-1, batch_size)
+
+
+def make_evaluation_batches(n_samples: int, batch_size: int):
+    n_batches = (n_samples + batch_size - 1) // batch_size
+    raw = np.arange(n_batches * batch_size, dtype=np.int64)
+    mask = raw < n_samples
+    indices = np.minimum(raw, n_samples - 1)
+    shape = (n_batches, batch_size)
+    return (
+        jnp.asarray(indices.reshape(shape)),
+        jnp.asarray(mask.reshape(shape), dtype=dtype_for_precision(PRECISION)),
+    )
+
+
+def create_validation_epoch(apply_fn):
+    @jax.jit
+    def validation_epoch(params, x, y, batch_indices, batch_mask):
+        zero = jnp.asarray(0.0, dtype=x.dtype)
+
+        def body(carry, batch):
+            loss_sum, count = carry
+            indices, mask = batch
+            target = y[indices]
+            prediction = apply_fn(params, x[indices])
+            if NORMALIZE_MODEL_OUTPUT:
+                prediction = normalize_vectors(prediction)
+                target = normalize_vectors(target)
+            sample_loss = jnp.mean(
+                jnp.abs(prediction - target),
+                axis=tuple(range(1, prediction.ndim)),
+            )
+            return (
+                loss_sum + jnp.sum(sample_loss * mask),
+                count + jnp.sum(mask),
+            ), None
+
+        (loss_sum, count), _ = jax.lax.scan(
+            body, (zero, zero), (batch_indices, batch_mask)
+        )
+        return loss_sum / count
+
+    return validation_epoch
+
+
+def make_optimizer(steps_per_epoch: int):
+    schedule = optax.cosine_decay_schedule(
+        init_value=LEARNING_RATE,
+        decay_steps=max(LR_DECAY_UNTIL_EPOCH * steps_per_epoch, 1),
+        alpha=FINAL_LEARNING_RATE / LEARNING_RATE,
+    )
+    return optax.adamw(schedule, weight_decay=WEIGHT_DECAY), schedule
+
+
+# =============================================================================
+# 5. CHECKPOINTS AND TESTING
+# =============================================================================
+
+def checkpoint_payload(state, epoch, best_val, best_epoch, wait):
     return {
-        "available": True,
-        "manifest_path": str(manifest_path),
-        "resolved_config": upstream.get("resolved_config"),
-        "git": upstream.get("git"),
-        "environment": upstream.get("environment"),
+        "state": state,
+        "epoch": int(epoch),
+        "best_validation_loss": float(best_val),
+        "best_epoch": int(best_epoch),
+        "wait": int(wait),
+        "seed": int(SEED),
     }
 
 
-# =============================================================================
-# JAX training / evaluation
-# =============================================================================
+def save_checkpoint(directory: Path, payload, epoch: int, keep: int):
+    directory.mkdir(parents=True, exist_ok=True)
+    checkpoints.save_checkpoint(
+        str(directory), payload, step=epoch, keep=keep, overwrite=True
+    )
 
 
-def make_epoch_perm(n_samples: int, batch_size: int, rng_key):
-    perm = jax.random.permutation(rng_key, n_samples)
-    n_batches = n_samples // batch_size
-    perm = perm[: n_batches * batch_size]
-    return perm.reshape(n_batches, batch_size)
+def restore_latest(directory: Path, fresh_state):
+    target = checkpoint_payload(fresh_state, -1, np.inf, -1, 0)
+    restored = checkpoints.restore_checkpoint(str(directory), target=target)
+    if int(restored["epoch"]) < 0:
+        raise FileNotFoundError(f"No checkpoint found in {directory}")
+    if int(restored["seed"]) != SEED:
+        raise ValueError("Checkpoint seed does not match SEED")
+    return (
+        restored["state"],
+        int(restored["epoch"]) + 1,
+        float(restored["best_validation_loss"]),
+        int(restored["best_epoch"]),
+        int(restored["wait"]),
+    )
 
 
-def normalize_state_vectors(y, eps: float = 1e-12):
-    norm = jnp.linalg.norm(y, axis=-1, keepdims=True)
-    norm = jnp.where(norm > eps, norm, 1.0)
-    return y / norm
-
-
-def mae_loss(params, x, y_target, apply_fn, normalize_output: bool):
-    y_pred = apply_fn(params, x)
-    if normalize_output:
-        y_pred = normalize_state_vectors(y_pred)
-        y_target = normalize_state_vectors(y_target)
-    return jnp.mean(jnp.abs(y_pred - y_target))
-
-
-def create_train_step(normalize_output: bool):
+def create_test_step(apply_fn):
     @jax.jit
-    def train_step(state, x, y_target):
-        loss, grad = jax.value_and_grad(mae_loss)(
-            state.params, x, y_target, state.apply_fn, normalize_output,
+    def test_step(params, x, y):
+        prediction = apply_fn(params, x)
+        if NORMALIZE_MODEL_OUTPUT:
+            prediction = normalize_vectors(prediction)
+            y = normalize_vectors(y)
+
+        mae = jnp.mean(jnp.abs(prediction - y), axis=-1)
+        mse = jnp.mean((prediction - y) ** 2, axis=-1)
+        prediction = prediction.reshape((prediction.shape[0], -1))
+        y = y.reshape((y.shape[0], -1))
+        fidelity = jnp.abs(jnp.sum(jnp.conj(y) * prediction, axis=-1)) ** 2
+        fidelity /= (
+            jnp.sum(jnp.abs(y) ** 2, axis=-1)
+            * jnp.sum(jnp.abs(prediction) ** 2, axis=-1)
+            + 1e-12
         )
-        state = state.apply_gradients(grads=grad)
-        return state, loss
-    return train_step
+        return mae, mse, fidelity
 
-
-def create_train_epoch(train_step):
-    @jax.jit
-    def train_epoch(state, X_train, Y_train, perm_batches):
-        def body_fn(carry, idx):
-            xb = X_train[idx]
-            yb = Y_train[idx]
-            new_state, loss = train_step(carry, xb, yb)
-            return new_state, loss
-        state, losses = jax.lax.scan(body_fn, state, perm_batches)
-        return state, jnp.mean(losses)
-    return train_epoch
-
-
-def create_eval_step(apply_fn, normalize_output=False):
-    @jax.jit
-    def eval_step(params, xb, yb):
-        pred = apply_fn(params, xb)
-        if normalize_output:
-            pred = normalize_state_vectors(pred)
-            yb = normalize_state_vectors(yb)
-        return jnp.mean(jnp.abs(pred - yb))
-    return eval_step
-
-
-def eval_epoch(params, X, Y, eval_step, batch_size):
-    n_samples = X.shape[0]
-    n_batches = n_samples // batch_size
-    losses = []
-    for i in range(n_batches):
-        start = i * batch_size
-        end = start + batch_size
-        losses.append(eval_step(params, X[start:end], Y[start:end]))
-    return float(jnp.mean(jnp.asarray(losses)))
-
-
-def create_test_step(apply_fn, normalize_output=False):
-    @jax.jit
-    def test_step(params, xb, yb):
-        pred = apply_fn(params, xb)
-        if normalize_output:
-            pred = normalize_state_vectors(pred)
-            yb = normalize_state_vectors(yb)
-
-        mae_s = jnp.mean(jnp.abs(pred - yb), axis=-1)
-        mse_s = jnp.mean((pred - yb) ** 2, axis=-1)
-
-        pred_f = pred.reshape((pred.shape[0], -1))
-        yb_f = yb.reshape((yb.shape[0], -1))
-        numerator = jnp.abs(jnp.sum(jnp.conj(yb_f) * pred_f, axis=-1)) ** 2
-        denominator = (
-            jnp.sum(jnp.abs(yb_f) ** 2, axis=-1) * jnp.sum(jnp.abs(pred_f) ** 2, axis=-1) + 1e-12
-        )
-        fid_s = numerator / denominator
-        loss_s = mae_s
-        return (jnp.mean(loss_s), jnp.mean(fid_s), jnp.mean(mse_s), jnp.mean(mae_s),
-                loss_s, fid_s, mse_s, mae_s)
     return test_step
 
 
-def test_epoch(params, X, Y, apply_fn, test_step, batch_size: int = 20):
-    n = X.shape[0]
-    total_loss = total_fid = total_mse = total_mae = 0.0
-    total_n = 0
-    loss_sample, fid_sample, mse_sample, mae_sample = [], [], [], []
-
-    for start in range(0, n, batch_size):
-        end = min(start + batch_size, n)
-        xb, yb = X[start:end], Y[start:end]
-        (loss_b, fid_b, mse_b, mae_b, loss_s, fid_s, mse_s, mae_s) = test_step(params, xb, yb)
-        bs = xb.shape[0]
-        total_loss += float(loss_b) * bs
-        total_fid += float(fid_b) * bs
-        total_mse += float(mse_b) * bs
-        total_mae += float(mae_b) * bs
-        total_n += bs
-        loss_sample.append(jax.device_get(loss_s))
-        fid_sample.append(jax.device_get(fid_s))
-        mse_sample.append(jax.device_get(mse_s))
-        mae_sample.append(jax.device_get(mae_s))
-
-    return (
-        total_loss / total_n, total_fid / total_n, total_mse / total_n, total_mae / total_n,
-        np.concatenate(loss_sample), np.concatenate(fid_sample),
-        np.concatenate(mse_sample), np.concatenate(mae_sample),
-    )
-
-
-def create_cosine_adamw_optimizer(learning_rate, lr_after_decay, decay_until_epoch,
-                                   steps_per_epoch, weight_decay=1e-4):
-    total_decay_steps = int(decay_until_epoch * steps_per_epoch)
-    lr_schedule = optax.cosine_decay_schedule(
-        init_value=learning_rate, decay_steps=total_decay_steps, alpha=lr_after_decay / learning_rate,
-    )
-    tx = optax.adamw(learning_rate=lr_schedule, weight_decay=weight_decay)
-    return tx, lr_schedule
-
-
-# =============================================================================
-# Checkpoint save / restore (schema v2, with legacy fallback)
-# =============================================================================
-
-
-def _checkpoint_target(state, seed: int, keys: dict, precision: str, split_mode: str) -> dict:
-    return {
-        "schema_version": CHECKPOINT_SCHEMA_VERSION, "state": state, "epoch": -1,
-        "best_val": np.inf, "best_epoch": -1, "wait": 0, "seed": int(seed),
-        "key_model_init": keys["model_init"], "key_data_split": keys["data_split"],
-        "key_epoch_root": keys["epoch_root"], "key_batch_root": keys["batch_root"],
-        "key_dropout_root": keys["dropout_root"], "precision": precision, "split_mode": split_mode,
-    }
-
-
-def _save_checkpoint(*, ckpt_dir, state, epoch, best_val, best_epoch, wait, keys, seed, precision, split_mode):
-    payload = _checkpoint_target(state, seed, keys, precision, split_mode)
-    payload.update({"epoch": epoch, "best_val": float(best_val), "best_epoch": int(best_epoch), "wait": int(wait)})
-    checkpoints.save_checkpoint(ckpt_dir, payload, step=epoch, keep=5)
-
-
-def _restore_checkpoint_with_fallback(*, ckpt_dir_restore, fresh_state, keys, log_file_path,
-                                       seed, precision, split_mode):
-    raw = checkpoints.restore_checkpoint(ckpt_dir_restore, target=None)
-    if raw is None:
-        raise FileNotFoundError(f"No checkpoint found to restore in: {ckpt_dir_restore}")
-
-    schema_version = raw.get("schema_version") if isinstance(raw, dict) else None
-
-    if schema_version is not None and int(schema_version) >= 2:
-        full_target = _checkpoint_target(fresh_state, seed, keys, precision, split_mode)
-        restored = checkpoints.restore_checkpoint(ckpt_dir_restore, target=full_target)
-
-        restored_seed = int(restored["seed"])
-        if restored_seed != int(seed):
-            log_file(log_file_path,
-                      f"WARNING: checkpoint was saved with seed={restored_seed}, but the "
-                      f"current SEED={seed} differs. Exact resumed-trajectory reproduction "
-                      f"is NOT guaranteed -- only params/optimizer-state continuation is.")
-        else:
-            log_file(log_file_path,
-                      f"Resumed from schema_version={schema_version} checkpoint; seed matches ({seed}).")
-
-        state = restored["state"]
-        start_epoch = int(restored["epoch"]) + 1
-        best_val = float(restored["best_val"])
-        best_epoch = int(restored["best_epoch"])
-        wait = int(restored["wait"])
-        log_file(log_file_path, f"Resuming from epoch: {start_epoch}")
-        return state, start_epoch, best_val, best_epoch, wait
-
-    log_file(log_file_path,
-              "WARNING: legacy checkpoint detected (no schema_version >= 2). Params and "
-              "optimizer state will still restore correctly; exact resumed-trajectory "
-              "reproduction is NOT guaranteed by this path.")
-    legacy_target = {"state": fresh_state, "epoch": -1, "best_val": np.inf, "best_epoch": -1, "wait": 0}
-    restored = checkpoints.restore_checkpoint(ckpt_dir_restore, target=legacy_target)
-    state = restored["state"]
-    start_epoch = int(restored["epoch"]) + 1
-    best_val = float(restored["best_val"])
-    best_epoch = int(restored["best_epoch"])
-    wait = int(restored["wait"])
-    log_file(log_file_path, f"Resuming from epoch: {start_epoch}")
-    return state, start_epoch, best_val, best_epoch, wait
-
-
-# =============================================================================
-# Main training function
-# =============================================================================
-
-
-def _default_cfg() -> dict:
-    """Snapshot of this file's top-of-file constants, used when
-    train_surrogate_model() is called with no override."""
-    return dict(
-        NODES=NODES, DIMENSIONS=DIMENSIONS, DATE=DATE, MODEL_NAME=MODEL_NAME,
-        HIDDEN_DIM=HIDDEN_DIM, DATA_PATH=DATA_PATH, DATA_SIZE=DATA_SIZE,
-        NORMALIZE_MODEL_OUTPUT=NORMALIZE_MODEL_OUTPUT, TRAIN_SPLIT=TRAIN_SPLIT,
-        VAL_SPLIT=VAL_SPLIT, TEST_SPLIT=TEST_SPLIT, LEARNING_RATE=LEARNING_RATE,
-        LR_AFTER_DECAY=LR_AFTER_DECAY, LR_DECAY_UNTIL_EPOCH=LR_DECAY_UNTIL_EPOCH,
-        BATCH_SIZE=BATCH_SIZE, NUM_EPOCHS=NUM_EPOCHS, PATIENCE=PATIENCE, TOLERANCE=TOLERANCE,
-        SEED=SEED, SPLIT_MODE=SPLIT_MODE, PRECISION=PRECISION,
-        DATASET_HASH_MODE=DATASET_HASH_MODE, DEBUG_TRACE=DEBUG_TRACE,
-        RESUME_FULL_STATE=RESUME_FULL_STATE, CKPT_DIR_RESTORE=CKPT_DIR_RESTORE,
-        ROOT_FOLDER=ROOT_FOLDER, LOSS_NAME=LOSS_NAME,
-        DETERMINISTIC_XLA=DETERMINISTIC_XLA,
-    )
-
-
-def train_surrogate_model(cfg: dict | None = None):
-    """Train the surrogate model. cfg overrides this file's top-of-file
-    constants; pass None (default) to use them directly -- no external
-    config file is read either way."""
-    cfg = dict(_default_cfg()) if cfg is None else dict(cfg)
-
-    nodes = cfg["NODES"]
-    dimensions = cfg["DIMENSIONS"]
-    model_name = cfg["MODEL_NAME"]
-    hidden_dim = cfg["HIDDEN_DIM"]
-    data_path = cfg["DATA_PATH"]
-    data_size = cfg["DATA_SIZE"]
-    normalize_model_output = cfg["NORMALIZE_MODEL_OUTPUT"]
-    train_split = cfg["TRAIN_SPLIT"]
-    val_split = cfg["VAL_SPLIT"]
-    test_split = cfg["TEST_SPLIT"]
-    learning_rate = cfg["LEARNING_RATE"]
-    lr_after_decay = cfg["LR_AFTER_DECAY"]
-    lr_decay_until_epoch = cfg["LR_DECAY_UNTIL_EPOCH"]
-    batch_size = cfg["BATCH_SIZE"]
-    num_epochs = cfg["NUM_EPOCHS"]
-    patience = cfg["PATIENCE"]
-    tolerance = cfg["TOLERANCE"]
-    seed = cfg["SEED"]
-    split_mode = cfg.get("SPLIT_MODE", "contiguous")
-    precision = cfg.get("PRECISION", "float32")
-    dataset_hash_mode = cfg.get("DATASET_HASH_MODE", "fast")
-    debug_trace = cfg.get("DEBUG_TRACE", False)
-    resume_full_state = cfg["RESUME_FULL_STATE"]
-    ckpt_dir_restore = cfg["CKPT_DIR_RESTORE"]
-    root_folder = cfg["ROOT_FOLDER"]
-    loss_name = cfg["LOSS_NAME"]
-
-    input_dims = 2 * nodes * (nodes - 1)
-    output_dims = 2 ** nodes
-    plot_title = f"Training loss, {model_name} (n={nodes}, hidden={hidden_dim})"
-
-    run_dir, ckpt_dir, plot_dir, snap_dir, log_file_path = create_run_dirs(root_folder, model_name, nodes)
-
-    model_info = {
-        "description": f"{model_name}, {nodes}-node case", "root_folder": root_folder,
-        "Folder": run_dir.name, "Nodes": nodes, "Dimensions": dimensions, "model_name": model_name,
-        "architecture": hidden_dim, "input_dims": input_dims, "output_dims": output_dims,
-        "batch_size": batch_size, "num_epoch": num_epochs, "lr": learning_rate,
-        "lr_schedule": {"type": "cosine_decay", "initial_lr": learning_rate,
-                        "final_lr": lr_after_decay, "decay_until_epoch": lr_decay_until_epoch},
-        "seed": seed, "split_mode": split_mode, "precision": precision,
-        "checkpoint_schema_version": CHECKPOINT_SCHEMA_VERSION, "patience": patience,
-        "tolerance": tolerance, "train_split": train_split, "val_split": val_split,
-        "test_split": test_split, "dataset": data_path, "data_size": data_size,
-        "normalize_model_output": normalize_model_output, "train_cont_full_state": resume_full_state,
-        "CKPT_DIR_restore": ckpt_dir_restore, "loss_name": loss_name, "plot_title": plot_title,
-    }
-
-    log_file(log_file_path, f"Run directory: {run_dir}")
-    log_file(log_file_path, f"JAX devices: {jax.devices()}")
-    log_file(log_file_path, f"Default backend: {jax.default_backend()}")
-    log_file(log_file_path, f"Precision: {precision} (x64 enabled: {jax.config.jax_enable_x64})")
-    log_file(log_file_path,
-             f"Deterministic XLA flag requested: {cfg.get('DETERMINISTIC_XLA', True)} "
-             f"(env has it: {deterministic_xla_env_is_set()})")
-    if cfg.get("DETERMINISTIC_XLA", True) and not deterministic_xla_env_is_set():
-        log_file(log_file_path,
-                 "WARNING: DETERMINISTIC_XLA=True but XLA_FLAGS does not contain "
-                 "--xla_gpu_deterministic_ops=true in this process's environment. For a "
-                 "guaranteed effect, export XLA_FLAGS=--xla_gpu_deterministic_ops=true in "
-                 "your shell/sbatch script before launching python.")
-
-    model_info_path = run_dir / "model_info.json"
-    write_json(model_info_path, model_info)
-
-    keys = derive_root_keys(seed)
-
-    model = create_model(model_name=model_name, hidden_dims=hidden_dim, out_dims=output_dims, nodes=nodes)
-    x_example = jnp.zeros((1, input_dims), dtype=dtype_for_precision(precision))
-    params = model.init(keys["model_init"], x_example)
-
-    effective_data_size = data_size if data_size is not None else 1
-    steps_per_epoch = max(int((effective_data_size * train_split) // batch_size), 1)
-
-    tx, lr_schedule_fn = create_cosine_adamw_optimizer(
-        learning_rate=learning_rate, lr_after_decay=lr_after_decay,
-        decay_until_epoch=lr_decay_until_epoch, steps_per_epoch=steps_per_epoch, weight_decay=1e-4,
-    )
-    state = train_state.TrainState.create(apply_fn=model.apply, params=params, tx=tx)
-
-    if resume_full_state:
-        state, start_epoch, best_val, best_epoch, wait = _restore_checkpoint_with_fallback(
-            ckpt_dir_restore=ckpt_dir_restore, fresh_state=state, keys=keys,
-            log_file_path=log_file_path, seed=seed, precision=precision, split_mode=split_mode,
+def test_model(params, x, y, test_step, dtype):
+    mae_all, mse_all, fidelity_all = [], [], []
+    for start in range(0, x.shape[0], BATCH_SIZE):
+        end = min(start + BATCH_SIZE, x.shape[0])
+        mae, mse, fidelity = test_step(
+            params,
+            jnp.asarray(x[start:end], dtype=dtype),
+            jnp.asarray(y[start:end], dtype=dtype),
         )
+        mae.block_until_ready()
+        mae_all.append(np.asarray(jax.device_get(mae)))
+        mse_all.append(np.asarray(jax.device_get(mse)))
+        fidelity_all.append(np.asarray(jax.device_get(fidelity)))
+    return (
+        np.concatenate(mae_all),
+        np.concatenate(mse_all),
+        np.concatenate(fidelity_all),
+    )
+
+
+# =============================================================================
+# 6. MAIN
+# =============================================================================
+
+def train() -> Path:
+    total_wall_start = time.perf_counter()
+    run_dir, resuming = prepare_run()
+    latest_dir = run_dir / "checkpoints" / "latest"
+    best_dir = run_dir / "checkpoints" / "best"
+    history_path = run_dir / "training_history.npy"
+    logger = make_logger(run_dir / "run.log")
+    dtype = dtype_for_precision(PRECISION)
+
+    logger.info("Run directory: %s", run_dir)
+    logger.info("Backend: %s | devices: %s", jax.default_backend(), jax.devices())
+    logger.info("Precision=%s | validation every epoch | plotting disabled", PRECISION)
+
+    if resuming:
+        validate_resume_config(run_dir)
+    else:
+        write_json(run_dir / "config.json", CONFIG)
+
+    master_key = jax.random.PRNGKey(SEED)
+    init_key = jax.random.fold_in(master_key, 0)
+    split_key = jax.random.fold_in(master_key, 1)
+    shuffle_root = jax.random.fold_in(master_key, 2)
+
+    start = time.perf_counter()
+    dataset_info = hash_file(DATA_PATH, mode=DATASET_HASH_MODE)
+    dataset_hash_seconds = time.perf_counter() - start
+
+    start = time.perf_counter()
+    x, y, source_dtypes = load_dataset(DATA_PATH, DATA_SIZE)
+    dataset_load_seconds = time.perf_counter() - start
+
+    start = time.perf_counter()
+    x_train, y_train, x_val, y_val, x_test, y_test, split_perm = (
+        random_reproducible_split(x, y, split_key)
+    )
+    dataset_split_seconds = time.perf_counter() - start
+
+    if x_train.shape[0] % BATCH_SIZE != 0:
+        raise ValueError("Training size must be divisible by BATCH_SIZE")
+
+    start = time.perf_counter()
+    x_train = jax.device_put(jnp.asarray(x_train, dtype=dtype))
+    y_train = jax.device_put(jnp.asarray(y_train, dtype=dtype))
+    x_val = jax.device_put(jnp.asarray(x_val, dtype=dtype))
+    y_val = jax.device_put(jnp.asarray(y_val, dtype=dtype))
+    y_val.block_until_ready()
+    host_to_device_seconds = time.perf_counter() - start
+
+    input_dim = 2 * NODES * (NODES - 1)
+    output_dim = 2 ** NODES
+
+    start = time.perf_counter()
+    model = create_model(
+        model_name=MODEL_NAME,
+        hidden_dims=HIDDEN_DIM,
+        out_dims=output_dim,
+        nodes=NODES,
+    )
+    params = model.init(init_key, jnp.zeros((1, input_dim), dtype=dtype))
+    jax.tree_util.tree_leaves(params)[0].block_until_ready()
+    model_initialisation_seconds = time.perf_counter() - start
+
+    start = time.perf_counter()
+    steps_per_epoch = x_train.shape[0] // BATCH_SIZE
+    optimizer, lr_schedule = make_optimizer(steps_per_epoch)
+    state = train_state.TrainState.create(
+        apply_fn=model.apply, params=params, tx=optimizer
+    )
+    optimizer_initialisation_seconds = time.perf_counter() - start
+
+    val_indices, val_mask = make_evaluation_batches(x_val.shape[0], BATCH_SIZE)
+    validation_epoch = create_validation_epoch(model.apply)
+    test_step = create_test_step(model.apply)
+    history = open_history(history_path, resuming)
+
+    if resuming:
+        state, start_epoch, best_val, best_epoch, wait = restore_latest(
+            latest_dir, state
+        )
+        clear_history_after(history, start_epoch)
+        logger.info("Resuming from epoch %d", start_epoch)
     else:
         start_epoch, best_val, best_epoch, wait = 0, np.inf, -1, 0
 
-    data_loading_start = time.time()
-    dataset_info = hash_file(data_path, mode=dataset_hash_mode)
-    data_generation_info = load_data_generation_info(data_path)
-
-    X_train, Y_train, X_val, Y_val, X_test, Y_test, split_info = load_and_split_dataset(
-        dataset_path=data_path, n_samples=data_size, train_split=train_split,
-        val_split=val_split, test_split=test_split, split_mode=split_mode, split_key=keys["data_split"],
+    start = time.perf_counter()
+    warm_key = jax.random.fold_in(shuffle_root, start_epoch)
+    warm_batches = make_epoch_batches(
+        warm_key, n_samples=x_train.shape[0], batch_size=BATCH_SIZE
     )
-
-    compute_dtype = dtype_for_precision(precision)
-    X_train = jax.device_put(jnp.asarray(X_train, dtype=compute_dtype))
-    Y_train = jax.device_put(jnp.asarray(Y_train, dtype=compute_dtype))
-    X_val = jax.device_put(jnp.asarray(X_val, dtype=compute_dtype))
-    Y_val = jax.device_put(jnp.asarray(Y_val, dtype=compute_dtype))
-
-    data_loading_time = time.time() - data_loading_start
-    log_file(log_file_path, f"Time for loading + splitting data: {data_loading_time}")
-
-    model_info["actual_train_size"] = int(X_train.shape[0])
-    model_info["actual_val_size"] = int(X_val.shape[0])
-    model_info["actual_test_size"] = int(X_test.shape[0])
-    write_json(model_info_path, model_info)
+    warm_batches.block_until_ready()
+    compiled_train = train_one_epoch.lower(
+        state, x_train, y_train, warm_batches
+    ).compile()
+    compiled_validation = validation_epoch.lower(
+        state.params, x_val, y_val, val_indices, val_mask
+    ).compile()
+    jit_compilation_seconds = time.perf_counter() - start
+    del warm_batches
 
     manifest = build_manifest(
-        resolved_config=dict(cfg),
+        resolved_config=CONFIG,
         seeds={
-            "seed": int(seed),
-            "key_model_init": hash_array(keys["model_init"]),
-            "key_data_split": hash_array(keys["data_split"]),
-            "key_epoch_root": hash_array(keys["epoch_root"]),
-            "key_batch_root": hash_array(keys["batch_root"]),
-            "key_dropout_root": hash_array(keys["dropout_root"]),
+            "master_key": hash_array(master_key),
+            "model_initialisation_key": hash_array(init_key),
+            "data_split_key": hash_array(split_key),
+            "epoch_shuffle_root": hash_array(shuffle_root),
         },
-        input_file_info=dataset_info, repo_root=REPO_ROOT,
-        extra={"split": split_info, "precision": precision,
-               "checkpoint_schema_version": CHECKPOINT_SCHEMA_VERSION,
-               "data_generation": data_generation_info},
+        input_file_info=dataset_info,
+        repo_root=str(Path(__file__).resolve().parent),
+        extra={
+            "source_dtypes": source_dtypes,
+            "split_permutation_hash": hash_array(split_perm),
+            "train_size": int(x_train.shape[0]),
+            "validation_size": int(x_val.shape[0]),
+            "test_size": int(x_test.shape[0]),
+            "backend": jax.default_backend(),
+            "devices": [str(device) for device in jax.devices()],
+            "xla_flags": os.environ.get("XLA_FLAGS", ""),
+        },
     )
     write_manifest(run_dir / "reproducibility_manifest.json", manifest)
 
-    trace_path = run_dir / "trace.jsonl" if debug_trace else None
-
-    train_step = create_train_step(normalize_output=normalize_model_output)
-    train_epoch = create_train_epoch(train_step)
-    eval_step = create_eval_step(apply_fn=state.apply_fn, normalize_output=normalize_model_output)
-    test_step = create_test_step(apply_fn=state.apply_fn, normalize_output=normalize_model_output)
-
-    train_losses, val_losses, epochs = [], [], []
-    early_stop = False
-    best_state = state
-    training_time_computation = 0.0
-    training_time_computation_list = []
-    epoch_time_list = []
-    full_loop_start = time.time()
-
-    for epoch in range(start_epoch, num_epochs):
-        epoch_compute_start = time.time()
-
-        epoch_key = epoch_key_for(keys["epoch_root"], epoch)
-        perm_batches = make_epoch_perm(X_train.shape[0], batch_size, epoch_key)
-
-        epoch_train_start = time.time()
-        state, train_loss = train_epoch(state, X_train, Y_train, perm_batches)
-        epoch_train_time = time.time() - epoch_train_start
-        epoch_time_list.append(epoch_train_time)
-
-        val_loss = eval_epoch(state.params, X_val, Y_val, eval_step, batch_size=batch_size)
-
-        epoch_compute_time = time.time() - epoch_compute_start
-        training_time_computation += epoch_compute_time
-        training_time_computation_list.append(training_time_computation)
-
-        num_batch = perm_batches.shape[0]
-        avg_time_batch = float(epoch_train_time) / float(num_batch)
-        current_lr = float(lr_schedule_fn(int(state.step)))
-
-        if val_loss < best_val - tolerance:
-            best_val = float(val_loss)
-            best_state = state
-            best_epoch = epoch
-            wait = 0
-
-            snap_path = snap_dir / f"best_param_epoch_{epoch}.msgpack"
-            save_params_msgpack(best_state.params, snap_path)
-            _save_checkpoint(ckpt_dir=ckpt_dir, state=state, epoch=epoch, best_val=best_val,
-                              best_epoch=best_epoch, wait=wait, keys=keys, seed=seed,
-                              precision=precision, split_mode=split_mode)
-            log_file(log_file_path, f"New checkpoint saved at Epoch {epoch}")
-        else:
-            wait += 1
-            if wait >= patience:
-                log_file(log_file_path, f"EARLY STOP at epoch {epoch}, best at {best_epoch}")
-                early_stop = True
-                break
-
-        log_file(log_file_path,
-                 f"Epoch={epoch:5d} | step={int(state.step):8d} | lr={current_lr:.2e} | "
-                 f"train_loss={float(train_loss):.8f} | val_loss={float(val_loss):.6f} | "
-                 f"epoch_compute_time={epoch_compute_time:.6f} | train_time_per_epoch={epoch_train_time:.6f} | "
-                 f"wait={wait} | patience={patience} | avg_batch_time={avg_time_batch:.6f} | ")
-
-        if trace_path is not None:
-            from utils import append_trace_line, hash_pytree
-            append_trace_line(trace_path, {
-                "global_step": int(state.step), "epoch": epoch,
-                "batch_indices_hash": hash_array(perm_batches), "learning_rate": current_lr,
-                "train_loss": float(train_loss), "val_loss": float(val_loss),
-                "params_hash": hash_pytree(state.params), "opt_state_hash": hash_pytree(state.opt_state),
-                "epoch_key_hash": hash_array(epoch_key),
-            })
-
-        train_losses.append(float(train_loss))
-        val_losses.append(float(val_loss))
-        epochs.append(epoch)
-
-        if epoch % 100 == 0:
-            save_training_plot(epochs, train_losses, val_losses, plot_dir / "training_curves.png",
-                                loss_name, plot_title)
-
-        model_info.update({
-            "train_loss": train_losses, "val_loss": val_losses, "best_val_loss": best_val,
-            "best_epoch": best_epoch, "data_loading_time": data_loading_time,
-            "cumulative_compute_time": training_time_computation_list,
-            "total_compute_time": training_time_computation, "train_step_time_list": epoch_time_list,
-        })
-        write_json(model_info_path, model_info)
-
-    full_loop_time = time.time() - full_loop_start
-    log_file(log_file_path, f"Total compute time: {training_time_computation / 60:.6f} mins")
-    log_file(log_file_path, f"Total wall time: {full_loop_time / 60:.6f} mins")
-
-    if best_state is not None:
-        state = best_state
-        log_file(log_file_path, f"Restored best params from epoch {best_epoch}")
-    else:
-        log_file(log_file_path, "No best state saved, using last state")
-
-    params_path = run_dir / "params.msgpack"
-    save_params_msgpack(state.params, params_path)
-    log_file(log_file_path, f"Saved params to {params_path}")
-
-    X_test = jax.device_put(jnp.asarray(X_test, dtype=compute_dtype))
-    Y_test = jax.device_put(jnp.asarray(Y_test, dtype=compute_dtype))
-
-    (loss_mean, fidelity_mean, mse_mean, mae_mean,
-     loss_list, fid_list, mse_list, mae_list) = test_epoch(
-        state.params, X_test, Y_test, state.apply_fn, test_step, batch_size=20,
+    logger.info(
+        "Setup seconds | hash=%.2f load=%.2f split=%.2f transfer=%.2f "
+        "model_init=%.2f optimizer_init=%.2f jit_compile=%.2f",
+        dataset_hash_seconds,
+        dataset_load_seconds,
+        dataset_split_seconds,
+        host_to_device_seconds,
+        model_initialisation_seconds,
+        optimizer_initialisation_seconds,
+        jit_compilation_seconds,
     )
 
-    log_file(log_file_path,
-             f"Test Loss: {loss_mean} | fidelity: {fidelity_mean} | mae: {mae_mean} | mse: {mse_mean}")
+    training_loop_start = time.perf_counter()
+    early_stopped = False
 
-    save_test_plot(fid_list, plot_dir / "test_fidelity_curve.png",
-                    title=f"Test Fidelity (n={nodes}, {loss_name})")
-    save_training_plot(epochs, train_losses, val_losses, plot_dir / "training_curves.png",
-                        loss_name, plot_title)
+    for epoch in range(start_epoch, NUM_EPOCHS):
+        epoch_wall_start = time.perf_counter()
 
-    np.savez(run_dir / "test_metrics.npz", loss=loss_list, fidelity=fid_list, mse=mse_list, mae=mae_list)
+        start = time.perf_counter()
+        epoch_key = jax.random.fold_in(shuffle_root, epoch)
+        batches = make_epoch_batches(
+            epoch_key, n_samples=x_train.shape[0], batch_size=BATCH_SIZE
+        )
+        batches.block_until_ready()
+        shuffle_seconds = time.perf_counter() - start
 
-    model_info.update({
-        "early_stop": early_stop, "train_loss": train_losses, "val_loss": val_losses,
-        "best_loss": best_val, "best_epoch": best_epoch, "data_loading_time": data_loading_time,
-        "cumulative_compute_time": training_time_computation_list,
-        "total_compute_time": training_time_computation, "total_wall_time": full_loop_time,
-        "train_step_time_list": epoch_time_list, "test_loss": float(loss_mean),
-        "test_fidelity": float(fidelity_mean), "test_mse": float(mse_mean), "test_mae": float(mae_mean),
-    })
-    write_json(model_info_path, model_info)
-    log_file(log_file_path, "Reached end of script!")
+        start = time.perf_counter()
+        state, train_loss_device = compiled_train(
+            state, x_train, y_train, batches
+        )
+        train_loss_device.block_until_ready()
+        train_seconds = time.perf_counter() - start
+        train_loss = float(train_loss_device)
 
+        start = time.perf_counter()
+        val_loss_device = compiled_validation(
+            state.params, x_val, y_val, val_indices, val_mask
+        )
+        val_loss_device.block_until_ready()
+        validation_seconds = time.perf_counter() - start
+        val_loss = float(val_loss_device)
+
+        improved = val_loss < best_val - TOLERANCE
+        if improved:
+            best_val, best_epoch, wait = val_loss, epoch, 0
+        else:
+            wait += 1
+
+        step = int(state.step)
+        learning_rate = float(lr_schedule(max(step - 1, 0)))
+        latest_saved = (
+            (epoch + 1) % CHECKPOINT_EVERY == 0
+            or epoch == NUM_EPOCHS - 1
+            or wait >= PATIENCE
+        )
+        payload = checkpoint_payload(state, epoch, best_val, best_epoch, wait)
+
+        update_history(history, epoch, {
+            "epoch": epoch,
+            "step": step,
+            "learning_rate": learning_rate,
+            "train_loss": train_loss,
+            "validation_loss": val_loss,
+            "best_validation_loss": best_val,
+            "best_epoch": best_epoch,
+            "wait": wait,
+            "shuffle_seconds": shuffle_seconds,
+            "train_seconds": train_seconds,
+            "validation_seconds": validation_seconds,
+            "best_checkpoint_seconds": 0.0,
+            "latest_checkpoint_seconds": 0.0,
+            "metrics_flush_seconds": 0.0,
+            "epoch_compute_seconds": (
+                shuffle_seconds + train_seconds + validation_seconds
+            ),
+            "epoch_wall_seconds": 0.0,
+            "latest_checkpoint_saved": False,
+            "best_checkpoint_saved": False,
+        })
+
+        start = time.perf_counter()
+        history.flush()
+        metrics_flush_seconds = time.perf_counter() - start
+
+        latest_checkpoint_seconds = 0.0
+        if latest_saved:
+            start = time.perf_counter()
+            save_checkpoint(
+                latest_dir, payload, epoch, keep=KEEP_LATEST_CHECKPOINTS
+            )
+            latest_checkpoint_seconds = time.perf_counter() - start
+
+        best_checkpoint_seconds = 0.0
+        if improved:
+            start = time.perf_counter()
+            save_checkpoint(best_dir, payload, epoch, keep=1)
+            save_params_msgpack(state.params, run_dir / "best_params.msgpack")
+            best_checkpoint_seconds = time.perf_counter() - start
+
+        epoch_wall_seconds = time.perf_counter() - epoch_wall_start
+        update_history(history, epoch, {
+            "best_checkpoint_seconds": best_checkpoint_seconds,
+            "latest_checkpoint_seconds": latest_checkpoint_seconds,
+            "metrics_flush_seconds": metrics_flush_seconds,
+            "epoch_wall_seconds": epoch_wall_seconds,
+            "latest_checkpoint_saved": latest_saved,
+            "best_checkpoint_saved": improved,
+        })
+        history.flush()
+
+        logger.info(
+            "epoch=%d | train=%.8e | validation=%.8e | shuffle=%.2fs | "
+            "train_time=%.2fs | validation_time=%.2fs | epoch_wall=%.2fs | "
+            "latest_ckpt=%s | best_ckpt=%s | best_epoch=%d | wait=%d/%d",
+            epoch,
+            train_loss,
+            val_loss,
+            shuffle_seconds,
+            train_seconds,
+            validation_seconds,
+            epoch_wall_seconds,
+            latest_saved,
+            improved,
+            best_epoch,
+            wait,
+            PATIENCE,
+        )
+
+        if wait >= PATIENCE:
+            early_stopped = True
+            logger.info("Early stopping at epoch %d", epoch)
+            break
+
+    training_loop_seconds = time.perf_counter() - training_loop_start
+    valid_history = history[history["epoch"] >= 0]
+
+    start = time.perf_counter()
+    best_target = checkpoint_payload(state, -1, np.inf, -1, 0)
+    best_payload = checkpoints.restore_checkpoint(str(best_dir), target=best_target)
+    if int(best_payload["epoch"]) < 0:
+        raise FileNotFoundError("No best-validation checkpoint was found")
+    best_state = best_payload["state"]
+    save_params_msgpack(best_state.params, run_dir / "params.msgpack")
+    best_restore_seconds = time.perf_counter() - start
+
+    start = time.perf_counter()
+    mae, mse, fidelity = test_model(
+        best_state.params, x_test, y_test, test_step, dtype
+    )
+    test_seconds = time.perf_counter() - start
+    np.savez(
+        run_dir / "test_metrics.npz",
+        mae=mae,
+        mse=mse,
+        fidelity=fidelity,
+    )
+
+    summary = {
+        "early_stopped": early_stopped,
+        "completed_epochs": int(valid_history.shape[0]),
+        "best_epoch": int(best_payload["best_epoch"]),
+        "best_validation_loss": float(best_payload["best_validation_loss"]),
+        "dataset_source_dtypes": source_dtypes,
+        "dataset_hash_seconds": dataset_hash_seconds,
+        "dataset_load_seconds": dataset_load_seconds,
+        "dataset_split_seconds": dataset_split_seconds,
+        "host_to_device_seconds": host_to_device_seconds,
+        "model_initialisation_seconds": model_initialisation_seconds,
+        "optimizer_initialisation_seconds": optimizer_initialisation_seconds,
+        "jit_compilation_seconds": jit_compilation_seconds,
+        "training_loop_seconds": training_loop_seconds,
+        "total_shuffle_seconds": float(np.nansum(valid_history["shuffle_seconds"])),
+        "total_train_seconds": float(np.nansum(valid_history["train_seconds"])),
+        "total_validation_seconds": float(
+            np.nansum(valid_history["validation_seconds"])
+        ),
+        "total_best_checkpoint_seconds": float(
+            np.nansum(valid_history["best_checkpoint_seconds"])
+        ),
+        "total_latest_checkpoint_seconds": float(
+            np.nansum(valid_history["latest_checkpoint_seconds"])
+        ),
+        "mean_epoch_wall_seconds": float(
+            np.nanmean(valid_history["epoch_wall_seconds"])
+        ),
+        "best_restore_seconds": best_restore_seconds,
+        "test_seconds": test_seconds,
+        "total_wall_seconds": time.perf_counter() - total_wall_start,
+        "test_mae": float(np.mean(mae)),
+        "test_mse": float(np.mean(mse)),
+        "test_fidelity": float(np.mean(fidelity)),
+    }
+    write_json(run_dir / "summary.json", summary)
+    logger.info("Complete | %s", summary)
+
+    history.flush()
+    del history
     return run_dir
 
 
 if __name__ == "__main__":
-    run_dir = train_surrogate_model()
-    print(f"Training complete. Results saved in: {run_dir}")
+    train()
