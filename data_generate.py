@@ -1,12 +1,12 @@
 """
-01_data_generate.py -- Stage 1: random graph -> quantum amplitude dataset.
+data_generate.py -- Stage 1: random graph -> quantum amplitude dataset.
 
 Imports shared PyTheus catalog/amplitude code from utils.py (also used by
 03_inverse_design.py); everything stage-specific (parameters, shard I/O,
 the main generate_dataset() orchestration) lives in this file. Edit the
 constants in the "Parameters" section below, then run:
 
-    python 01_data_generate.py
+    python data_generate.py
 
 Output path is fully automatic -- no folder ever needs to be defined
 externally. When SAVE_DATA=True, data is written to
@@ -61,7 +61,7 @@ N_SAMPLES = 20_000000       # total samples to generate
 BATCH_SIZE = 5000  # matches historical dataset-generation batch structure
 SHARD_SIZE = 500_000      # max samples per saved shard file
 
-SEED = 34              # np.random.default_rng seed -- reproducible given the
+SEED = 59              # np.random.default_rng seed -- reproducible given the
                        # same seed and a full identical rerun (see note at
                        # the bottom of this file on what this guarantees).
 
