@@ -51,27 +51,30 @@ from utils import (
 )
 
 # =============================================================================
-# Parameters -- edit these directly, no external config file involved.
+# Parameters -- edit these directly.
 # =============================================================================
 
 VERTICES = 4          # graph vertices / photons / modes
 DIMENSIONS = 2         # local Hilbert-space dimension (2 = qubit-like)
 
-N_SAMPLES = 1000       # total samples to generate
-BATCH_SIZE = 100       # samples per JAX batch during generation
-SHARD_SIZE = 1000      # max samples per saved shard file
+N_SAMPLES = 20_000000       # total samples to generate
+BATCH_SIZE = 5000  # matches historical dataset-generation batch structure
+SHARD_SIZE = 500_000      # max samples per saved shard file
 
-SEED = 0               # np.random.default_rng seed -- reproducible given the
+SEED = 34              # np.random.default_rng seed -- reproducible given the
                        # same seed and a full identical rerun (see note at
                        # the bottom of this file on what this guarantees).
 
 # If True, data is written to disk at an auto-computed path (see module
 # docstring) -- no folder name ever needs to be chosen or passed in. If
 # False, nothing is written; only the arrays are returned.
-SAVE_DATA = True
-DATA_ROOT = "results/data_generation"
 
-REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+SAVE_DATA = True
+
+
+REPO_ROOT = Path(__file__).resolve().parent
+
+DATA_ROOT = REPO_ROOT / "results" / "data_generation"
 
 # False (default) -> raw unnormalised amplitude vectors from the simulator.
 #                    This is what the surrogate model is trained to predict.
@@ -79,6 +82,20 @@ REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 # Must match NORMED_DATA used in 03_inverse_design.py's starting-sample
 # generation, if that also generates fresh samples.
 NORMED_DATA = False
+
+# Numerical precision for generated weights, amplitudes, shards, and merged data.
+# Change only this line to switch the entire data-generation pipeline.
+PRECISION = "float32"  # "float32" or "float64", data used for training the model, was produced with float32, so keep it that way for now.
+if PRECISION not in {"float32", "float64"}:
+    raise ValueError("PRECISION must be 'float32' or 'float64'")
+
+if PRECISION == "float64":
+    jax.config.update("jax_enable_x64", True) # Allow actual 64-bit arrays and calculations.
+    NP_FLOAT_DTYPE = np.float64
+    JAX_FLOAT_DTYPE = jnp.float64
+else:
+    NP_FLOAT_DTYPE = np.float32
+    JAX_FLOAT_DTYPE = jnp.float32
 
 
 # =============================================================================
@@ -147,10 +164,11 @@ def merge_shards_to_npz(out_dir: Path, output_name: str = "dataset_merged.npz") 
     if not shard_files:
         raise FileNotFoundError(f"No shard files found in {out_dir}")
 
-    first = np.load(shard_files[0])
-    num_edges = first["weights"].shape[1]
-    n_kets = first["amps"].shape[1]
-    first.close()
+    with np.load(shard_files[0]) as first:
+        num_edges = first["weights"].shape[1]
+        n_kets = first["amps"].shape[1]
+        weights_dtype = first["weights"].dtype
+        amps_dtype = first["amps"].dtype
 
     total_samples = 0
     for shard_file in shard_files:
@@ -158,11 +176,11 @@ def merge_shards_to_npz(out_dir: Path, output_name: str = "dataset_merged.npz") 
             total_samples += data["weights"].shape[0]
 
     weights_memmap = np.memmap(
-        out_dir / "merged_weights.dat", dtype="float32", mode="w+",
+        out_dir / "merged_weights.dat", dtype=weights_dtype, mode="w+",
         shape=(total_samples, num_edges),
     )
     amps_memmap = np.memmap(
-        out_dir / "merged_amps.dat", dtype="float32", mode="w+",
+        out_dir / "merged_amps.dat", dtype=amps_dtype, mode="w+",
         shape=(total_samples, n_kets),
     )
 
@@ -210,6 +228,7 @@ def generate_dataset(
     logger.info(f"n_samples={n_samples:,}, batch_size={batch_size:,}")
     logger.info(f"seed={seed}")
     logger.info(f"normed_data={normed_data}")
+    logger.info(f"precision={PRECISION}")
     logger.info(f"save_data={save_data}  out_dir={out_dir}")
 
     logger.info("Precomputing PyTheus perfect-matching catalog...")
@@ -220,11 +239,11 @@ def generate_dataset(
     logger.info(f"num_edges={num_edges}  n_kets={n_kets}  catalog time={time.time() - t0:.2f}s")
 
     tensor_gpu = jax.device_put(jnp.array(tensor, dtype=jnp.int32))
-    mask_gpu = jax.device_put(jnp.array(mask, dtype=jnp.float32))
+    mask_gpu = jax.device_put(jnp.asarray(mask, dtype=JAX_FLOAT_DTYPE))
 
     logger.info("JIT warmup...")
     dummy_batch_size = min(1000, batch_size)
-    dummy_weights = jnp.ones((dummy_batch_size, num_edges), dtype=jnp.float32)
+    dummy_weights = jnp.ones((dummy_batch_size, num_edges), dtype=JAX_FLOAT_DTYPE)
     if normed_data:
         compute_amplitudes(dummy_weights, tensor_gpu, mask_gpu).block_until_ready()
     else:
@@ -236,7 +255,10 @@ def generate_dataset(
             "vertices": vertices, "dimensions": dimensions, "n_samples": n_samples,
             "batch_size": batch_size, "seed": seed, "num_edges": num_edges, "n_kets": n_kets,
             "input_shape": [n_samples, num_edges], "output_shape": [n_samples, n_kets],
-            "normed_data": normed_data, "graph_regime": "random_dense_level_5",
+            "normed_data": normed_data, "precision": PRECISION,
+            "weights_dtype": str(np.dtype(NP_FLOAT_DTYPE)),
+            "amps_dtype": str(np.dtype(NP_FLOAT_DTYPE)),
+            "graph_regime": "random_dense_level_5",
             "weight_range": [-1.0, 1.0],
         }
         with open(out_dir / "metadata.json", "w", encoding="utf-8") as f:
@@ -250,8 +272,8 @@ def generate_dataset(
     all_amps: list[np.ndarray] = []
 
     if out_dir is not None:
-        shard_weights = np.empty((shard_size, num_edges), dtype=np.float32)
-        shard_amps = np.empty((shard_size, n_kets), dtype=np.float32)
+        shard_weights = np.empty((shard_size, num_edges), dtype=NP_FLOAT_DTYPE)
+        shard_amps = np.empty((shard_size, n_kets), dtype=NP_FLOAT_DTYPE)
         shard_fill = 0
         shard_idx = 0
 
@@ -263,14 +285,30 @@ def generate_dataset(
     while samples_done < n_samples:
         n_current = min(batch_size, n_samples - samples_done)
 
-        weights_np = generate_random_dense_weights(rng, n_current, num_edges)
-        weights_gpu = jax.device_put(jnp.array(weights_np, dtype=jnp.float32))
+        #weights_np = generate_random_dense_weights(rng, n_current, num_edges)
+        # Match the old generator: draw the batch and then shuffle its rows
+        weights_np = np.empty(
+            (n_current, num_edges),
+            dtype=NP_FLOAT_DTYPE,
+        )
+
+        weights_np[:] = rng.uniform(
+            low=-1.0,
+            high=1.0,
+            size=(n_current, num_edges),
+        )
+
+        perm = rng.permutation(n_current)
+
+        weights_np = weights_np[perm]
+        
+        weights_gpu = jax.device_put(jnp.asarray(weights_np, dtype=JAX_FLOAT_DTYPE))
 
         if normed_data:
             amps_gpu = compute_amplitudes(weights_gpu, tensor_gpu, mask_gpu)
         else:
             amps_gpu = compute_amplitudes_no_norms(weights_gpu, tensor_gpu, mask_gpu)
-        amps_np = np.array(amps_gpu, dtype=np.float32)
+        amps_np = np.asarray(jax.device_get(amps_gpu), dtype=NP_FLOAT_DTYPE)
 
         all_weights.append(weights_np)
         all_amps.append(amps_np)
@@ -325,6 +363,7 @@ def generate_dataset(
                 vertices=vertices, dimensions=dimensions, n_samples=n_samples,
                 batch_size=batch_size, seed=seed, shard_size=shard_size,
                 normed_data=normed_data, save_data=save_data, data_root=data_root,
+                precision=PRECISION,
             ),
             seeds={"seed": int(seed)},
             input_file_info={"note": "Stage 1 has no input file -- it is the data source."},
@@ -356,5 +395,5 @@ if __name__ == "__main__":
 #
 # `amps` are computed on whatever JAX backend is available (GPU or CPU
 # fallback); floating-point addition/multiplication is not associative, so
-# different hardware/XLA versions can produce tiny (~1e-5) float32
+# different hardware/XLA versions can still produce tiny floating-point
 # differences, though `weights` remain exact. See REPRODUCIBILITY.md.
