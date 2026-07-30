@@ -89,7 +89,7 @@ OUT_DIM = 2**NPHOTONS
 
 GENERATE_DATA = False
 CONDITIONED_DATA_PATH = (
-    "paper_like_initial_fidelity_all_targets/n4/GHZ/paper_like_initial_fidelity_dataset.npz"
+    "paper_data/inverse_init_fin_data/n4/GHZ/random_start_pool.npz"
 )
 MAX_INITIAL_SAMPLES = None
 
