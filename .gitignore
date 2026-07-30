@@ -59,3 +59,9 @@ check_runs.log
 executed_*.ipynb
 *.aux
 missfont.log
+
+# ---------------------------------------------------------------------------
+# Exception: curated inverse-design initial-fidelity data, tracked on purpose
+# ---------------------------------------------------------------------------
+!paper_data/
+!paper_data/**
