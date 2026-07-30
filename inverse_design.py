@@ -82,7 +82,7 @@ OUT_DIM = 2**NPHOTONS
 
 
 # -----------------------------------------------------------------------------
-# Starting samples
+# Settings for generating samples
 # -----------------------------------------------------------------------------
 # True  → generate fresh random starting graphs
 # False → load starting graphs from CONDITIONED_DATA_PATH
