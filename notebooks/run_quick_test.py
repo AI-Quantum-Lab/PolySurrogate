@@ -8,7 +8,7 @@ everything under one results/ folder, one subfolder per stage:
   3. Inverse optimisation  -> results/quick_test/inverse_design/GHZ_n4/GHZ_n4_{i}/
 
 All three stages' exact output folders are auto-numbered by
-01_data_generate.py / 02_ml_model.py / 03_inverse_design.py themselves --
+01_data_generate.py / 02_ml_model.py / inverse_design.py themselves --
 this script never predicts those paths, it reads back whatever
 generate_dataset() / train_surrogate_model() / run_optimisation() actually
 returned.
@@ -17,7 +17,7 @@ Usage (run from the project root):
     python notebooks/run_quick_test.py
 
 No PYTHONPATH setup needed -- the repo root is added to sys.path below, then
-01_data_generate.py, 02_ml_model.py, and 03_inverse_design.py are loaded via
+01_data_generate.py, 02_ml_model.py, and inverse_design.py are loaded via
 importlib.import_module (a literal `import 01_data_generate` isn't valid
 Python, since identifiers can't start with a digit).
 """
@@ -109,7 +109,7 @@ def run_training(data_path: str):
 
 def run_inverse_design(model_dir: str):
     section("Stage 3 / 3 -- Inverse-design optimisation")
-    stage3 = _load_stage("03_inverse_design")
+    stage3 = _load_stage("inverse_design")
 
     model_path = f"{model_dir}/params.msgpack"
     cfg = dict(

@@ -6,7 +6,7 @@ Comprehensive, per-stage reference for every tunable parameter in the pipeline. 
 
 - [Stage 1 — `01_data_generate.py`](#stage-1--01_data_generatepy)
 - [Stage 2 — `02_ml_model.py`](#stage-2--02_ml_modelpy)
-- [Stage 3 — `03_inverse_design.py`](#stage-3--03_inverse_designpy)
+- [Stage 3 — `inverse_design.py`](#stage-3--inverse_designpy)
 - [Cross-stage consistency requirements](#cross-stage-consistency-requirements)
 
 ---
@@ -87,7 +87,7 @@ Trains a PNN or FNN surrogate to map graph weights → unnormalised amplitude ve
 
 ---
 
-## Stage 3 — `03_inverse_design.py`
+## Stage 3 — `inverse_design.py`
 
 Uses the trained surrogate as a differentiable proxy for PyTheus: gradient descent on graph weights toward a target quantum state, verified against the exact PyTheus simulator, then pruned to a sparse graph.
 

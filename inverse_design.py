@@ -1,15 +1,15 @@
 """
-03_inverse_design.py -- Stage 3: inverse-design optimisation.
+inverse_design.py -- Stage 3: inverse-design optimisation.
 
 Imports shared PyTheus catalog/amplitude code, model definitions, and
-reproducibility primitives from utils.py (also used by 01_data_generate.py
-and 02_ml_model.py); everything stage-specific (parameters, target states,
+reproducibility primitives from utils.py (also used by data_generate.py
+and ml_model.py); everything stage-specific (parameters, target states,
 the jitter mechanism, the optimisation loop, pruning) lives in this file.
 Edit the constants in the "Parameters" section below, then run:
 
-    python 03_inverse_design.py
+    python inverse_design.py
 
-Reads MODEL_PATH (the `params.msgpack` written by 02_ml_model.py -- connected
+Reads MODEL_PATH (the `params.msgpack` written by ml_model.py -- connected
 only through that file, not through a Python import). Uses the trained
 surrogate as a differentiable proxy for PyTheus: gradient descent on graph
 weights minimises loss = (1 - fidelity) + lambda_l1 * ||x||_1, with
@@ -18,7 +18,7 @@ simulator, then pruned to a sparse graph. Writes results under an
 auto-numbered run folder:
     <RESULTS_ROOT>/<TARGET>_n<NPHOTONS>/<TARGET>_n<NPHOTONS>_<i>/
 where `i` is the next free integer for that (target, node-count) pair --
-never user-typed, same scheme 01_data_generate.py / 02_ml_model.py use.
+never user-typed, same scheme data_generate.py / ml_model.py use.
 
 Stopping condition is a single threshold: nn_fid >= EARLY_STOP_NN_FID OR
 step >= MAX_TOTAL_STEPS.
@@ -32,7 +32,6 @@ keeps the same sample_id (position in its dataset).
 
 from __future__ import annotations
 
-import importlib
 import json
 import os
 import sys
@@ -45,6 +44,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 import optax
+import data_generate
 
 from utils import (
     build_manifest,
@@ -64,101 +64,165 @@ from utils import (
 
 
 # =============================================================================
-# Parameters -- edit these directly, no external config file involved.
+# Inverse-design configuration
+# Edit values here directly — no external config file is used.
 # =============================================================================
 
+
+# -----------------------------------------------------------------------------
+# Problem
+# -----------------------------------------------------------------------------
+
 NPHOTONS = 4
-TARGET_NAME = "GHZ"           # "GHZ" | "W" | "LINEAR_CLUSTER" | "SINGLE" | "ZERO"
-MODEL_TYPE = "PNN"             # "PNN" or "FNN"
-
-# ---- Starting samples ----
-# GENERATE_DATA=True  -> fresh random starting graphs (no file needed)
-# GENERATE_DATA=False -> load from CONDITIONED_DATA_PATH
-GENERATE_DATA = True
-CONDITIONED_DATA_PATH = "results/data_generation_conditioned/conditioned_dataset.npz"
-MAX_INITIAL_SAMPLES = None
-
-DATA_SAMPLES = 5              # how many starting samples to optimise
-DATA_BATCH_SIZE = 5            # JAX batch size while generating starting samples
-DATA_SEED = 4                  # reproducibility seed for starting-sample generation
-LOW_FIDELITY_THRESHOLD = 0.999  # discard fresh samples already this close to the target
-NORMED_DATA = False    # must match the NORMED_DATA used by 01_data_generate.py
-
-# ---- Trained surrogate model ----
-ARCHITECTURE = 400     # PNN: int hidden dim; FNN: tuple, matching 02_ml_model.py's HIDDEN_DIM
-MODEL_PATH = "results/model_training/PNN/n4/n4_0/params.msgpack"
-NORMALIZE_MODEL_OUTPUT = False   # must match NORMALIZE_MODEL_OUTPUT in 02_ml_model.py
+TARGET_NAME = "GHZ"       # "GHZ" | "W" | "LINEAR_CLUSTER" | "SINGLE" | "ZERO"
+MODEL_TYPE = "PNN"        # "PNN" | "FNN"
 
 INPUT_DIM = 2 * NPHOTONS * (NPHOTONS - 1)
-OUT_DIM = 2 ** NPHOTONS
+OUT_DIM = 2**NPHOTONS
 
-# ---- Optimisation objective ----
-# loss = (1 - fidelity) + lambda_l1 * sum(abs(x)) -- the L1 term encourages
-# a sparse graph (few active edges) after pruning below.
+
+# -----------------------------------------------------------------------------
+# Starting samples
+# -----------------------------------------------------------------------------
+# True  → generate fresh random starting graphs
+# False → load starting graphs from CONDITIONED_DATA_PATH
+
+GENERATE_DATA = False
+CONDITIONED_DATA_PATH = (
+    "paper_like_initial_fidelity_all_targets/n4/GHZ/paper_like_initial_fidelity_dataset.npz"
+)
+MAX_INITIAL_SAMPLES = None
+
+DATA_SAMPLES = 1000
+DATA_BATCH_SIZE = 5
+DATA_SEED = 4
+
+# Discard generated samples already too close to the target.
+LOW_FIDELITY_THRESHOLD = 0.999
+
+# Must match NORMED_DATA in 01_data_generate.py.
+NORMED_DATA = False
+
+
+# -----------------------------------------------------------------------------
+# Trained surrogate
+# -----------------------------------------------------------------------------
+
+# PNN: integer hidden dimension
+# FNN: tuple matching HIDDEN_DIM in ml_model.py
+ARCHITECTURE = 400
+
+MODEL_PATH = "results/model_training/PNN/n4/n4_5/best_params.msgpack"
+
+# Must match NORMALIZE_MODEL_OUTPUT in ml_model.py.
+NORMALIZE_MODEL_OUTPUT = False
+
+
+# -----------------------------------------------------------------------------
+# Optimisation objective
+# -----------------------------------------------------------------------------
+# loss = (1 - fidelity) + LAMBDA_L1 * sum(abs(x))
+#
+# The L1 penalty encourages sparse graphs with fewer active edges.
+
 LAMBDA_L1 = 1e-3
 
-# ---- Optimisation schedule ----
-SEED = 46                      # master seed: drives jitter noise (see utils.py key plan)
-NUM_STEPS = 20                 # smoke test: increase to 10_000+ for real runs
-EARLY_STOP_NN_FID = 0.99999    # surrogate-fidelity stopping threshold
+
+# -----------------------------------------------------------------------------
+# Optimisation
+# -----------------------------------------------------------------------------
+
+SEED = 46
+NUM_STEPS = 100000                 # Smoke test; use 10_000+ for production
+MAX_TOTAL_STEPS = 100000           # Hard ceiling; defaults to NUM_STEPS if unset
+EARLY_STOP_NN_FID = 0.99999
 
 LEARNING_RATE = 1e-2
 MIN_LEARNING_RATE = 1e-6
-LR_DECAY_STEPS = 20             # smoke test: match NUM_STEPS
+LR_DECAY_STEPS = 100000            # For smoke tests, normally match NUM_STEPS
 LR_EXPONENT = 1.0
 
-CLIP_MIN = -1.0                 # graph weights are clipped to [CLIP_MIN, CLIP_MAX] after each step
+CLIP_MIN = -1.0
 CLIP_MAX = 1.0
 
-# ---- Jittering (stall-detection + escalating re-perturbation) ----
-# Stopping condition is the single EARLY_STOP_NN_FID / MAX_TOTAL_STEPS
-# threshold above -- jitter does NOT change the stopping condition, it just
-# helps the optimiser escape a stalled trajectory before that threshold is
-# reached. All jitter noise is reproducible (see utils.py's fold_in key plan)
-# -- a pure function of (SEED, sample_id, event_index).
-JITTER_ENABLED = True           # master on/off switch for the whole mechanism below
-INITIAL_JITTER = 0.01           # sigma of a one-time perturbation applied before step 1
-JITTER_SCHEDULE = [0.01, 0.05, 0.10, 0.20, 0.30, 0.50, 0.70, 1.00, 1.00, 1.00, 1.00, 1.00]
-                                 # escalating sigma used for each successive stall-triggered jitter event
-JITTER_MAX_EVENTS = 12          # give up re-perturbing after this many events (per sample)
-STUCK_PATIENCE_STEPS = 500      # steps with < STUCK_MIN_IMPROVEMENT before a jitter event fires
-STUCK_MIN_IMPROVEMENT = 1e-4    # minimum fidelity gain over STUCK_PATIENCE_STEPS to NOT be "stuck"
 
-# Hard ceiling on total steps. Falls back to NUM_STEPS if not overridden.
-MAX_TOTAL_STEPS = 20
+# -----------------------------------------------------------------------------
+# Jittering
+# -----------------------------------------------------------------------------
+# Jittering perturbs stalled trajectories but does not change the stopping
+# criteria: EARLY_STOP_NN_FID or MAX_TOTAL_STEPS.
+#
+# Noise is reproducible and determined by:
+#     (SEED, sample_id, event_index)
 
-# ---- Verification and logging frequency ----
-PRINT_EVERY = 1                 # how often (in steps) to print a log line
-VERIFY_EVERY = 1                # how often (in steps) to check PyTheus fidelity during the loop
+JITTER_ENABLED = True
 
-# True stores gradients/update vectors for every step -- large JSON files
-# for long runs; keep False for production.
+# One-time perturbation before the first optimisation step.
+INITIAL_JITTER = 0.01
+
+# Noise scale for each successive stall-triggered jitter event.
+JITTER_SCHEDULE = [
+    0.01,
+    0.05,
+    0.10,
+    0.20,
+    0.30,
+    0.50,
+    0.70,
+    1.00,
+    1.00,
+    1.00,
+    1.00,
+    1.00,
+]
+
+JITTER_MAX_EVENTS = 100000
+STUCK_PATIENCE_STEPS = 1000
+STUCK_MIN_IMPROVEMENT = 1e-4
+
+
+# -----------------------------------------------------------------------------
+# Verification and logging
+# -----------------------------------------------------------------------------
+
+PRINT_EVERY = 1
+VERIFY_EVERY = 1
+
+# Storing every gradient and update vector can produce very large output files.
 STORE_STEP_VECTORS = False
 
-# ---- Pruning ----
-# After optimisation, weights are zeroed at each threshold in turn; a step
-# is only kept if the resulting fidelity drop is within PRUNE_FID_TOLERANCE.
-PRUNE_FID_TOLERANCE = 1e-4
-PRUNE_THRESHOLDS = [1e-5, 1e-4, 1e-3, 1e-2, 1e-1]
 
-# ---- Output ----
-# Outputs are written to <RESULTS_ROOT>/<TARGET>_n<NPHOTONS>/<TARGET>_n<NPHOTONS>_<i>/,
-# where <i> is auto-numbered (see _next_run_dir) -- no user-typed run name,
-# same scheme 01_data_generate.py / 02_ml_model.py use for their own outputs.
+# -----------------------------------------------------------------------------
+# Pruning
+# -----------------------------------------------------------------------------
+# Thresholds are tested sequentially. A pruning step is accepted only when the
+# resulting fidelity loss is no greater than PRUNE_FID_TOLERANCE.
+
+PRUNE_FID_TOLERANCE = 1e-6
+PRUNE_THRESHOLDS = [
+    1e-5,
+    1e-4,
+    1e-3,
+    1e-2,
+    1e-1,
+]
+
+
+# -----------------------------------------------------------------------------
+# Output
+# -----------------------------------------------------------------------------
+# Output structure:
+#
+#   <RESULTS_ROOT>/
+#       <TARGET>_n<NPHOTONS>/
+#           <TARGET>_n<NPHOTONS>_<run_index>/
+#
+# The run index is assigned automatically by _next_run_dir.
+
 RESULTS_ROOT = "results/inverse_design"
-
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
-
-
-def _load_stage1():
-    """Load 01_data_generate.py by module name (a literal `import
-    01_data_generate` isn't valid Python, since identifiers can't start
-    with a digit) -- reused here so starting-sample generation shares the
-    exact same generate_dataset() as Stage 1, instead of a second, drifting
-    copy of the same generation loop."""
-    return importlib.import_module("01_data_generate")
 
 
 # =============================================================================
@@ -245,7 +309,7 @@ def scalar_k_value(k_value: Any) -> int:
 
 
 def generate_low_fidelity_dataset(cfg: Dict[str, Any], target_state: np.ndarray):
-    """Generate initial samples in-memory (via 01_data_generate.py's own
+    """Generate initial samples in-memory (via data_generate.py's own
     generate_dataset(), save_data=False -- nothing written to disk, no
     entry added to Stage 1's dataset registry), keeping only samples whose
     fidelity to the target is below cfg['low_fidelity_threshold']."""
@@ -253,8 +317,6 @@ def generate_low_fidelity_dataset(cfg: Dict[str, Any], target_state: np.ndarray)
     batch_size = int(cfg["data_batch_size"])
     threshold = float(cfg["low_fidelity_threshold"])
     seed = int(cfg["data_seed"])
-
-    stage1 = _load_stage1()
 
     X_kept, Y_kept = [], []
     total_kept = 0
@@ -267,7 +329,7 @@ def generate_low_fidelity_dataset(cfg: Dict[str, Any], target_state: np.ndarray)
         remaining = n_samples - total_kept
         current_batch = max(batch_size, remaining)
 
-        X_batch, Y_batch, _ = stage1.generate_dataset(
+        X_batch, Y_batch, _ = data_generate.generate_dataset(
             vertices=cfg["n"], dimensions=cfg.get("dimensions", 2), n_samples=current_batch,
             batch_size=cfg.get("generation_gpu_batch_size", current_batch), seed=round_seed,
             normed_data=cfg.get("normed_data", True), save_data=False,
@@ -300,11 +362,11 @@ def generate_low_fidelity_dataset(cfg: Dict[str, Any], target_state: np.ndarray)
 
 
 def load_model_training_info(model_path: str) -> dict:
-    """Read 02_ml_model.py's reproducibility_manifest.json from next to
+    """Read ml_model.py's reproducibility_manifest.json from next to
     MODEL_PATH (same directory) and pull out its resolved_config/seeds --
     the training hyperparameters needed to retrain this exact model. That
     manifest already embeds Stage 1's own data-generation recipe (see
-    02_ml_model.py's load_data_generation_info), so this closes the full
+    ml_model.py's load_data_generation_info), so this closes the full
     chain: optimisation -> model -> training recipe -> data recipe, all
     reachable from just this run's own manifest."""
     manifest_path = Path(model_path).parent / "reproducibility_manifest.json"

@@ -10,7 +10,7 @@ The pipeline is three flat, numbered scripts — no config files, no `src/`/`con
 
 1. **`01_data_generate.py`** — generate random dense graph weights and the corresponding unnormalised quantum-state amplitude vectors, using a PyTheus perfect-matching catalogue.
 2. **`02_ml_model.py`** — train a surrogate PNN (Polynomial Neural Network) or FNN to learn the graph-weights → unnormalised amplitude map.
-3. **`03_inverse_design.py`** — use the trained surrogate to optimise graph weights toward a target state (GHZ, W, linear-cluster, …), verified against PyTheus and pruned to a sparse graph.
+3. **`inverse_design.py`** — use the trained surrogate to optimise graph weights toward a target state (GHZ, W, linear-cluster, …), verified against PyTheus and pruned to a sparse graph.
 
 <details>
 <summary>Glossary — PNN, fidelity, GHZ, PyTheus, …</summary>
@@ -54,7 +54,7 @@ The pipeline is three flat, numbered scripts — no config files, no `src/`/`con
 PolySurrogate/
 ├── 01_data_generate.py   ← Stage 1: generate_dataset()
 ├── 02_ml_model.py         ← Stage 2: train_surrogate_model()
-├── 03_inverse_design.py   ← Stage 3: run_optimisation()
+├── inverse_design.py   ← Stage 3: run_optimisation()
 ├── utils.py                ← shared code used by all three stages (see below)
 ├── notebooks/
 │   ├── sample_workflow.ipynb   ← start here
@@ -185,7 +185,7 @@ PolySurrogate -- quick end-to-end smoke test
 cd PolySurrogate
 python 01_data_generate.py    # writes results/data_generation/n4/n4_0/
 python 02_ml_model.py          # edit DATA_PATH first if not n4_0; writes results/model_training/PNN/n4/n4_0/
-python 03_inverse_design.py    # edit MODEL_PATH first if not n4_0; writes results/inverse_design/GHZ_n4/GHZ_n4_0/
+python inverse_design.py    # edit MODEL_PATH first if not n4_0; writes results/inverse_design/GHZ_n4/GHZ_n4_0/
 ```
 
 Each script's parameters are top-of-file constants — open the file and edit them directly.
@@ -247,7 +247,7 @@ All parameters are top-of-file constants in the three numbered scripts — no ex
 </details>
 
 <details>
-<summary>03_inverse_design.py — inverse design parameters</summary>
+<summary>inverse_design.py — inverse design parameters</summary>
 
 | Setting | Default | Meaning |
 |---------|---------|---------|
@@ -358,8 +358,8 @@ run_dir = stage2.train_surrogate_model(cfg)
 
 ```bash
 # Edit MODEL_PATH, NPHOTONS, TARGET_NAME, ARCHITECTURE at the top of
-# 03_inverse_design.py to match your trained model
-python 03_inverse_design.py
+# inverse_design.py to match your trained model
+python inverse_design.py
 ```
 
 <details>
@@ -367,7 +367,7 @@ python 03_inverse_design.py
 
 ```python
 from importlib import import_module
-stage3 = import_module("03_inverse_design")
+stage3 = import_module("inverse_design")
 
 cfg = dict(stage3._default_cfg())
 cfg.update({
@@ -415,7 +415,7 @@ results/model_training/PNN/n4/n4_0/
 │   ├── training_curves.png
 │   └── test_fidelity_curve.png
 ├── model_info.json
-├── params.msgpack               ← use as MODEL_PATH in 03_inverse_design.py
+├── params.msgpack               ← use as MODEL_PATH in inverse_design.py
 ├── reproducibility_manifest.json
 ├── run_log.txt
 └── test_metrics.npz

@@ -1,6 +1,6 @@
 """
 utils.py -- shared functions used by 01_data_generate.py, 02_ml_model.py,
-and 03_inverse_design.py.
+and inverse_design.py.
 
 This file holds only genuinely common code: things that would otherwise be
 byte-for-byte duplicated across two or more of the numbered stage scripts
@@ -80,7 +80,7 @@ def write_json(path: Path, data: dict) -> None:
 # =============================================================================
 #
 # Shared by 01_data_generate.py (fresh random samples), 02_ml_model.py's
-# training target (the amplitudes 01 produced), and 03_inverse_design.py
+# training target (the amplitudes 01 produced), and inverse_design.py
 # (both for generating fresh starting samples and for PyTheus verification
 # of the optimiser's current graph against the target state).
 
@@ -283,7 +283,7 @@ def epoch_key_for(key_epoch_root, epoch: int):
 
 
 def optimiser_jitter_root_key(seed: int):
-    """Used by 03_inverse_design.py. Root key for all jitter randomness,
+    """Used by inverse_design.py. Root key for all jitter randomness,
     independent of every other key derived from the same SEED."""
     return jax.random.fold_in(jax.random.PRNGKey(seed), KEY_TAG_OPTIMISER_JITTER)
 

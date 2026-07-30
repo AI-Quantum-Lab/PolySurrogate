@@ -2,7 +2,7 @@
 data_generate.py -- Stage 1: random graph -> quantum amplitude dataset.
 
 Imports shared PyTheus catalog/amplitude code from utils.py (also used by
-03_inverse_design.py); everything stage-specific (parameters, shard I/O,
+inverse_design.py); everything stage-specific (parameters, shard I/O,
 the main generate_dataset() orchestration) lives in this file. Edit the
 constants in the "Parameters" section below, then run:
 
@@ -79,7 +79,7 @@ DATA_ROOT = REPO_ROOT / "results" / "data_generation"
 # False (default) -> raw unnormalised amplitude vectors from the simulator.
 #                    This is what the surrogate model is trained to predict.
 # True  -> amplitudes are L2-normalised so ||psi||_2 = 1 before saving.
-# Must match NORMED_DATA used in 03_inverse_design.py's starting-sample
+# Must match NORMED_DATA used in inverse_design.py's starting-sample
 # generation, if that also generates fresh samples.
 NORMED_DATA = False
 
