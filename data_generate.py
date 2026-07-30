@@ -20,7 +20,7 @@ generate_dataset() always returns `(weights, amps, out_dir)`, with
 When saved, a `reproducibility_manifest.json` is also written alongside
 `dataset_merged.npz` -- git commit, environment (JAX/jaxlib/flax/optax/
 pytheus/numpy versions, devices), the resolved config (including the seed),
-and a hash of the generated dataset file itself. Stage 2 (02_ml_model.py)
+and a hash of the generated dataset file itself. Stage 2 (ml_model.py)
 reads `dataset_merged.npz` from whichever `out_dir` this run produced --
 there is no direct code import between the numbered stage scripts, only
 the generated folder.
