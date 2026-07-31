@@ -53,7 +53,7 @@ PolySurrogate/
 ├── PARAMETERS.md            Extended per-parameter reference for the three scripts above
 ├── notebooks/
 │   ├── sample_workflow.ipynb   Small, verified, end-to-end demo (see Notebooks)
-│   └── run_quick_test.py       Terminal smoke-test script (currently out of date — see Notebooks)
+│   └── run_quick_test.py       Terminal smoke-test script — all 3 stages, ~20s (see Notebooks)
 ├── paper_data/               Curated starting-sample data + settings/provenance used for
 │                           the manuscript's production runs (see Paper Data)
 ├── plotting_code/            Notebooks + data that reproduce the manuscript's figures
@@ -274,7 +274,7 @@ The `notebooks/` folder contains:
 | File | Purpose |
 |---|---|
 | **`sample_workflow.ipynb`** | Demonstrates the **complete workflow end to end**: generates a small dataset (5,000 samples), trains a 4-photon PNN (20 epochs), then uses it for inverse design against one of the generated samples' own quantum state. Deliberately tiny so it runs in well under a minute; not intended to produce research-quality results — see the notebook's own caveats. This is the notebook to start with. |
-| `run_quick_test.py` | A terminal smoke-test script intended to run all three stages without opening a notebook. **Currently out of date** — it calls a `train_surrogate_model(cfg)` function that no longer exists in `ml_model.py` (the current API configures `ml_model`'s module-level constants directly and calls `train()`, as shown in `sample_workflow.ipynb`). Do not rely on it until it is updated to match the current scripts. |
+| `run_quick_test.py` | A terminal smoke-test script that runs all three stages without opening a notebook — generates 200 samples, trains a 4-photon PNN for 10 epochs, then runs a 3-sample/10-step GHZ inverse-design pass, checking that every expected output file was written at each stage. Runs in well under a minute (~20s on CPU). Useful for quickly verifying an installation or a code change without launching Jupyter. |
 
 No other notebooks live in this folder — `plotting_code/` has its own separate set of notebooks for reproducing manuscript figures (see [Plotting Code](#plotting-code)).
 
@@ -286,6 +286,51 @@ jupyter notebook notebooks/sample_workflow.ipynb
 ```
 
 Run all cells top to bottom; every configuration value used lives in one cell near the top. Outputs are written under `results/sample_workflow/`. (`jupyter`/`ipykernel` must be installed — see [Installation](#installation) / `requirements.txt`.)
+
+Alternatively, run the terminal smoke test (no Jupyter needed):
+
+```bash
+python notebooks/run_quick_test.py
+```
+
+<details>
+<summary><strong>Expected terminal output</strong></summary>
+
+```text
+PolySurrogate -- quick end-to-end smoke test
+Project root: /path/to/PolySurrogate
+
+============================================================
+  Stage 1 / 3 -- Data generation
+============================================================
+  Generated + merged in 2.4s -> .../results/quick_test/data_generation/n4/n4_0/dataset_merged.npz
+  weights=(200, 24)  amps=(200, 16)
+  [OK] merged dataset: ...
+
+============================================================
+  Stage 2 / 3 -- Model training
+============================================================
+  Training complete in 7.5s -> .../results/quick_test/model_training/PNN/n4/n4_0
+  [OK] best_params.msgpack: ...
+  [OK] config.json: ...
+  [OK] summary.json: ...
+  [OK] reproducibility_manifest.json: ...
+
+============================================================
+  Stage 3 / 3 -- Inverse-design optimisation
+============================================================
+  Optimisation complete in 10.9s -> .../results/quick_test/inverse_design/GHZ_n4/GHZ_n4_0
+  [OK] best_graph_solution.json: ...
+  [OK] optimisation_summary.json: ...
+  [OK] reproducibility_manifest.json: ...
+  [OK] log.txt: ...
+
+============================================================
+  ALL STAGES PASSED  (20.6s total)
+============================================================
+```
+
+</details>
 
 ---
 
