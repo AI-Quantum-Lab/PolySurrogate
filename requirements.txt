@@ -1,7 +1,10 @@
-# Core dependencies for surrogate_model_clean.
-# Python >= 3.9 recommended. JAX/Flax compatibility can vary by platform and
-# CUDA version — see https://jax.readthedocs.io/en/latest/installation.html
-# for GPU-specific install instructions.
+# Core dependencies for PolySurrogate.
+# Python >= 3.10 recommended (developed/tested with 3.12.7). JAX/Flax
+# compatibility can vary by platform and CUDA version — see
+# https://jax.readthedocs.io/en/latest/installation.html for GPU-specific
+# install instructions. This installs a CPU-only JAX build; for GPU support,
+# afterwards run e.g. `pip install --upgrade "jax[cuda12]"` — see
+# README.md -> Installation.
 #
 # Windows note: installing flax pulls in orbax-checkpoint, which can fail on
 # native Windows with "WinError 206: The filename or extension is too long".
@@ -14,6 +17,7 @@ flax
 optax
 pytheusQ   # PyPI distribution name; imports as "pytheus" (pytheus.theseus)
 
-# Notebook-only (not required for the src/ scripts):
+# Needed only to run notebooks/sample_workflow.ipynb and plotting_code/*.ipynb
+# (not required for the three main scripts run from the terminal):
 # jupyter
 # ipykernel
