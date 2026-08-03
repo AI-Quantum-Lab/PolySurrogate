@@ -1,10 +1,15 @@
 {
   "nphotons": 6,
-  "target_name": "all",
-  "model_type": "HNN",
-  "model_path": "/home/bo48god/quick_tests/Experiment_data_collection/Models_11_05_26/run_HNN_6_MAE_20M_cosine_decay_ara/params.msgpack",
-  "conditioned_data_path": "/home/bo48god/quick_tests/data_unnormalised/n6_20M/dataset_merged.npz",
-  "num_samples": 10000,
+  "target_name": "N/A (generic random dense graph test-slice samples, not target-conditioned)",
+  "model_type": "PNN",
+  "model_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/results/model_training/PNN/n6/n6_0/best_params.msgpack",
+  "dataset_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/results/data_generation/n6/n6_0/dataset_merged.npz",
+  "test_range": [
+    18000000,
+    20000000
+  ],
+  "sample_seed": 4,
+  "num_samples": 1000,
   "input_dim": 60,
   "out_dim": 64,
   "jacobian_shape": [
@@ -12,7 +17,10 @@
     60
   ],
   "use_absolute_jacobian": true,
-  "correlation_nn_vs_pytheus": 0.999999996943351,
-  "mean_absolute_sensitivity_difference": 1.413377844983188e-06,
-  "max_absolute_sensitivity_difference": 1.461803913116455e-05
+  "hidden_dim": 2000,
+  "training_seed": 159,
+  "training_precision": "float64",
+  "correlation_nn_vs_pytheus": 0.9999999999988985,
+  "mean_absolute_sensitivity_difference": 8.475045437853561e-07,
+  "max_absolute_sensitivity_difference": 3.8934672301022386e-06
 }

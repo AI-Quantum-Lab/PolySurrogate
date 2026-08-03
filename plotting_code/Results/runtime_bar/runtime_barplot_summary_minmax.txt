@@ -1,18 +1,18 @@
 
 GHZ
 ================================================================================
-n=4 | PyTheus samples=50, PyTheus mean=3.6043221807, PyTheus std=2.6713811198, PyTheus min=0.5020430088, PyTheus max=10.7810137272, Surrogate samples=50, Surrogate mean=0.9475790450, Surrogate std=0.1813033486, Surrogate min=0.6864144541, Surrogate max=1.4132837793
-n=6 | PyTheus samples=50, PyTheus mean=114.2824835968, PyTheus std=89.0594052656, PyTheus min=18.2622697353, PyTheus max=403.9730136395, Surrogate samples=50, Surrogate mean=3.3690245278, Surrogate std=5.7579420467, Surrogate min=0.9315144778, Surrogate max=38.0970803578
-n=8 | PyTheus samples=20, PyTheus mean=4157.2161467910, PyTheus std=2828.6316869407, PyTheus min=1238.0077974796, PyTheus max=13093.0946457386, Surrogate samples=50, Surrogate mean=6.5657927530, Surrogate std=10.9480443277, Surrogate min=0.7784438259, Surrogate max=40.2949084667
+n=4 | PyTheus samples=50, PyTheus mean=1.4409477363, PyTheus std=0.8058410910, PyTheus min=0.2912415909, PyTheus max=3.5959450118, Surrogate samples=50, Surrogate mean=1.2763392200, Surrogate std=0.1412528949, Surrogate min=1.0826791660, Surrogate max=1.6872516880
+n=6 | PyTheus samples=50, PyTheus mean=56.5564872667, PyTheus std=71.0674340271, PyTheus min=10.7005194901, PyTheus max=429.7881629160, Surrogate samples=50, Surrogate mean=2.8747127047, Surrogate std=2.8496521980, Surrogate min=1.3130337801, Surrogate max=18.1313004508
+n=8 | PyTheus samples=50, PyTheus mean=2754.7915448743, PyTheus std=1537.2889485217, PyTheus min=1045.5114405099, PyTheus max=7831.7471882680, Surrogate samples=50, Surrogate mean=5.8624785669, Surrogate std=4.9932888084, Surrogate min=1.3571193689, Surrogate max=21.6212519272
 
 W
 ================================================================================
-n=4 | PyTheus samples=50, PyTheus mean=1.5045466661, PyTheus std=1.0098582363, PyTheus min=0.6778895855, PyTheus max=5.7822110653, Surrogate samples=50, Surrogate mean=1.2700920717, Surrogate std=0.3498849163, Surrogate min=0.7134240982, Surrogate max=2.1750121564
-n=6 | PyTheus samples=50, PyTheus mean=36.3750622416, PyTheus std=10.8346289363, PyTheus min=20.6625344753, PyTheus max=70.1431469917, Surrogate samples=50, Surrogate mean=2.0188021310, Surrogate std=0.4407936551, Surrogate min=1.2841782756, Surrogate max=2.9912271127
-n=8 | PyTheus samples=50, PyTheus mean=2161.8458782196, PyTheus std=227.8583920518, PyTheus min=1719.2931022644, PyTheus max=2665.0390079021, Surrogate samples=50, Surrogate mean=2.3218156001, Surrogate std=0.3650817203, Surrogate min=1.5953399339, Surrogate max=3.0211462029
+n=4 | PyTheus samples=50, PyTheus mean=0.7074088479, PyTheus std=0.3763215376, PyTheus min=0.3626336548, PyTheus max=2.7274884749, Surrogate samples=50, Surrogate mean=1.7093056078, Surrogate std=0.2923641881, Surrogate min=1.1497969683, Surrogate max=2.2895317622
+n=6 | PyTheus samples=50, PyTheus mean=20.4116176811, PyTheus std=5.0131988042, PyTheus min=14.9485860579, PyTheus max=36.2172356362, Surrogate samples=50, Surrogate mean=5.8078976076, Surrogate std=6.3151942372, Surrogate min=1.5248681474, Surrogate max=26.2816346008
+n=8 | PyTheus samples=50, PyTheus mean=1523.9473865322, PyTheus std=164.9358603956, PyTheus min=1202.2529526830, PyTheus max=1929.3428694650, Surrogate samples=50, Surrogate mean=13.1306519537, Surrogate std=11.7241851765, Surrogate min=1.5604471941, Surrogate max=57.6900346670
 
 LC
 ================================================================================
-n=4 | PyTheus samples=50, PyTheus mean=1.5752456236, PyTheus std=0.7104573599, PyTheus min=0.9271743298, PyTheus max=4.1515491009, Surrogate samples=50, Surrogate mean=0.9590803468, Surrogate std=0.1655034034, Surrogate min=0.6341048479, Surrogate max=1.4703419227
-n=6 | PyTheus samples=50, PyTheus mean=178.6831685877, PyTheus std=172.3019963380, PyTheus min=46.2164254189, PyTheus max=910.1670057774, Surrogate samples=50, Surrogate mean=7.8271116826, Surrogate std=12.1103952391, Surrogate min=1.1075678933, Surrogate max=37.9887705483
-n=8 | PyTheus samples=46, PyTheus mean=14882.5196244976, PyTheus std=9411.8121188608, PyTheus min=3777.7766191959, PyTheus max=49041.4286313057, Surrogate samples=50, Surrogate mean=10.2250169149, Surrogate std=13.6676992821, Surrogate min=1.3132240949, Surrogate max=39.4917587242
+n=4 | PyTheus samples=50, PyTheus mean=0.8986857812, PyTheus std=0.2341633079, PyTheus min=0.5287670998, PyTheus max=1.7484788089, Surrogate samples=50, Surrogate mean=1.4656180125, Surrogate std=0.3910684220, Surrogate min=1.0956811500, Surrogate max=3.0301662651
+n=6 | PyTheus samples=50, PyTheus mean=117.0246830133, PyTheus std=78.6681179878, PyTheus min=28.8200794959, PyTheus max=435.1817049710, Surrogate samples=50, Surrogate mean=6.0684485395, Surrogate std=6.9100652161, Surrogate min=1.4421817227, Surrogate max=30.7852054271
+n=8 | PyTheus samples=46, PyTheus mean=14882.5196244976, PyTheus std=9411.8121188608, PyTheus min=3777.7766191959, PyTheus max=49041.4286313057, Surrogate samples=50, Surrogate mean=15.2458095811, Surrogate std=14.2062364624, Surrogate min=3.7369295121, Surrogate max=65.8026794028

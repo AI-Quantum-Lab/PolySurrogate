@@ -1,37 +1,24 @@
 {
   "node": 6,
-  "model_type": "HNN",
+  "model_type": "PNN",
   "samples": 1000,
-  "data_seed": 4,
-  "normed_data": true,
-  "level_ratios": [
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    1.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0
+  "sample_seed": 4,
+  "test_range": [
+    18000000,
+    20000000
   ],
-  "architecture": [
-    1000
-  ],
-  "model_path": "/home/bo48god/quick_tests/Experiment_data_collection/Models_11_05_26/run_HNN_6_MAE_20M_cosine_decay_ara/params.msgpack",
+  "dataset_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/results/data_generation/n6/n6_0/dataset_merged.npz",
+  "hidden_dim": 2000,
+  "model_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/results/model_training/PNN/n6/n6_0/best_params.msgpack",
   "input_dim": 60,
   "out_dim": 64,
-  "mae_mean": 8.611645898781717e-05,
-  "mae_std": 1.3772694728686474e-05,
-  "mae_mean_minus_std": 7.23437642591307e-05,
-  "mae_mean_plus_std": 9.988915371650364e-05,
-  "mae_median": 8.463129051961005e-05,
-  "mae_min": 5.643853364745155e-05,
-  "mae_max": 0.00013731699436903,
-  "histogram_png_path": "hnn_model_testing_results/n_6/mae_distribution_n6.png",
-  "histogram_pdf_path": "hnn_model_testing_results/n_6/mae_distribution_n6.pdf",
-  "mae_values_path": "hnn_model_testing_results/n_6/mae_values_n6.npy"
+  "training_seed": 159,
+  "training_precision": "float64",
+  "normalize_model_output": false,
+  "mae_mean": 3.913786037485279e-06,
+  "mae_std": 8.390711940998641e-07,
+  "mae_median": 3.821410445734301e-06,
+  "mae_min": 1.8976973864029108e-06,
+  "mae_max": 7.530200148335355e-06,
+  "mae_values_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/plotting_code/Data/testing_data/mae_values_n6_new.npy"
 }
