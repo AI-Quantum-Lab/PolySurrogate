@@ -49,7 +49,12 @@ from pytheus import theseus as th
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
-assert REPO_ROOT.name == "PolySurrogate", REPO_ROOT
+assert (REPO_ROOT / "utils.py").exists(), (
+    f"Expected repo root at {REPO_ROOT} (parent of plotting_code/) to contain "
+    "utils.py -- checked by file presence, not by directory name, since the "
+    "repo folder itself may be cloned/renamed to anything (e.g. "
+    "PolySurrogate_temp, PolySurrogate_verify)."
+)
 
 # The original "store_all_vectors" rerun (graph_weights_all_steps.json/.npy)
 # does not exist on this machine. Instead, this reconstructs the identical
