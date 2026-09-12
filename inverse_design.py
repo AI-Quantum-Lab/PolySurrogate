@@ -39,6 +39,13 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List
 
+DETERMINISTIC_XLA = True
+if DETERMINISTIC_XLA:
+    flag = "--xla_gpu_deterministic_ops=true"
+    current = os.environ.get("XLA_FLAGS", "")
+    if flag not in current:
+        os.environ["XLA_FLAGS"] = f"{current} {flag}".strip()
+
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -785,7 +792,7 @@ def _default_cfg() -> dict:
         max_total_steps=MAX_TOTAL_STEPS,
         print_every=PRINT_EVERY, verify_every=VERIFY_EVERY, store_step_vectors=STORE_STEP_VECTORS,
         prune_fid_tolerance=PRUNE_FID_TOLERANCE, prune_thresholds=PRUNE_THRESHOLDS,
-        results_root=RESULTS_ROOT,
+        results_root=RESULTS_ROOT, deterministic_xla=DETERMINISTIC_XLA,
     )
 
 

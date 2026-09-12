@@ -114,7 +114,7 @@ configure_precision(PRECISION)
 # mode was not taking the fast TF32 path for float32 matmuls, while A100's
 # native FP64 tensor cores gave float64 a real hardware advantage instead.
 # Scoped to this file only (not utils.py), since utils.py is shared by
-# 02_ml_model.py, whose established reproducibility comparisons (fold_in
+# ml_model.py, whose established reproducibility comparisons (fold_in
 # vs split, CPU vs GPU) should not have their numerics touched by this.
 if PRECISION == "float32":
     jax.config.update("jax_default_matmul_precision", "default")
