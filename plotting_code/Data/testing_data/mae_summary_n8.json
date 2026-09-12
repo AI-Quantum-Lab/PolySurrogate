@@ -1,24 +1,25 @@
 {
   "node": 8,
   "model_type": "PNN",
-  "samples": 1000,
-  "sample_seed": 4,
+  "samples": 2000000,
+  "sample_seed": null,
   "test_range": [
     18000000,
     20000000
   ],
-  "dataset_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/results/data_generation/n8/n8_0/dataset_merged.npz",
+  "note": "Full contiguous test pool (all 2,000,000 rows), not a subsample. Previous version of this file used a 1,000-sample random subsample (sample_seed=4) of the same test_range; superseded 2026-09-12.",
+  "dataset_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate_temp/results/data_generation/n8/n8_0/dataset_merged.npz",
   "hidden_dim": 15000,
-  "model_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/results/model_training/PNN/n8/n8_1/best_params.msgpack",
+  "model_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate_temp/results/model_training/PNN/n8/n8_1/params.msgpack",
   "input_dim": 112,
   "out_dim": 256,
   "training_seed": 159,
   "training_precision": "float64",
   "normalize_model_output": false,
-  "mae_mean": 5.9673368733905445e-05,
-  "mae_std": 1.1223489189955407e-05,
-  "mae_median": 5.89908813421799e-05,
-  "mae_min": 3.275166493793276e-05,
-  "mae_max": 9.774064808684639e-05,
-  "mae_values_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/plotting_code/Data/testing_data/mae_values_n8_new.npy"
+  "mae_mean": 5.9336165577406064e-05,
+  "mae_std": 1.140666881838115e-05,
+  "mae_median": 5.8449164498597383e-05,
+  "mae_min": 2.038536695181392e-05,
+  "mae_max": 0.00014753040159121156,
+  "mae_values_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate_temp/plotting_code/Data/testing_data/mae_values_n8.npy"
 }
