@@ -6,6 +6,17 @@ PolySurrogate uses JAX and Flax to learn the relationship between weighted photo
 graph weights → PNN/FNN surrogate → quantum amplitudes → inverse design
 ```
 
+## Contents
+
+- [Repository layout](#repository-layout)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Running the three stages directly](#running-the-three-stages-directly)
+- [Paper figures](#paper-figures)
+- [Paper data and pretrained models](#paper-data-and-pretrained-models)
+- [Citation](#citation)
+- [License](#license)
+
 ## Repository layout
 
 ```text
