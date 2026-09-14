@@ -20,7 +20,7 @@ PolySurrogate/
 └── LICENSE
 ```
 
-All generated datasets, models, and optimisation runs are written under `results/`. This directory is ignored by Git and can be deleted at any time.
+
 
 ## Installation
 
