@@ -20,8 +20,6 @@ PolySurrogate/
 └── LICENSE
 ```
 
-
-
 ## Installation
 
 Python 3.11 or newer is required. Development and verification used Python 3.12.
