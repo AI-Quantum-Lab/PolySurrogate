@@ -35,8 +35,7 @@ The pipeline is three flat, independent scripts — `data_generate.py`, `ml_mode
 4. [Notebooks](#notebooks)
 5. [Paper Data](#paper-data)
 6. [Plotting Code](#plotting-code)
-7. [Troubleshooting](#troubleshooting)
-8. [Citation](#citation)
+7. [Citation](#citation)
 
 ---
 
@@ -391,50 +390,7 @@ Generated figures are written under `plotting_code/Results/<figure-name>/`, alon
 
 ---
 
-## Troubleshooting
 
-<details>
-<summary>Common issues and fixes</summary>
-
-**`ModuleNotFoundError: No module named 'pytheus'`**
-Run `pip install pytheusQ`, not `pip install pytheus` — see [Installation](#installation).
-
-**`Jax plugin configuration error` / `cuInit(0) failed` / `Unknown CUDA error 303`**
-JAX tried to initialise a CUDA plugin that doesn't match the available driver/GPU (or no GPU is visible, e.g. on a login node). This is **non-fatal** — JAX automatically falls back to CPU, reported by `jax.devices()` returning `[CpuDevice(...)]`. Install a JAX build matching your CUDA version to use a GPU (see [Installation](#installation)).
-
-**CPU vs GPU execution is silent**
-`jax.default_backend()` and `jax.devices()` (printed by `data_generate.py`/`ml_model.py`/`inverse_design.py` at startup) tell you which backend is actually active — always check this first if a run seems unexpectedly slow.
-
-**`FileNotFoundError` on `DATA_PATH` / `MODEL_PATH` / `CONDITIONED_DATA_PATH`**
-These are literal paths to one specific auto-numbered run folder (e.g. `n4_0`). If the referenced stage was re-run since, the newest output may be in `n4_1`, `n4_2`, etc. — check `results/.../n{N}/` for what actually exists and update the constant.
-
-**`PNN`/`FNN` architecture mismatch between training and inverse design**
-`HIDDEN_DIM` (`ml_model.py`) and `ARCHITECTURE` (`inverse_design.py`) must be the same value *and* type — an integer for PNN, a tuple for FNN.
-
-**Normalisation mismatch**
-`NORMED_DATA` (`data_generate.py`) must equal `NORMED_DATA` (`inverse_design.py`); `NORMALIZE_MODEL_OUTPUT` (`ml_model.py`) must equal `NORMALIZE_MODEL_OUTPUT` (`inverse_design.py`). These are two independent pairs.
-
-**`ValueError` about training set size not divisible by `BATCH_SIZE`**
-`ml_model.py` requires the training split's sample count to divide evenly by `BATCH_SIZE`. Pick a `BATCH_SIZE` that divides `N_SAMPLES * TRAIN_SPLIT`.
-
-**GPU out-of-memory (`RESOURCE_EXHAUSTED` / CUDA OOM) with large datasets or `HIDDEN_DIM`**
-This is GPU **device memory**, a fixed hardware limit per card — increasing host RAM (e.g. a job scheduler's `--mem`) does not help. Reduce `DATA_SIZE` (`ml_model.py`) or `HIDDEN_DIM`, use `PRECISION="float32"` instead of `"float64"` (roughly half the memory), or use a GPU with more VRAM. As one concrete data point from this project: the full 20M-sample dataset at `HIDDEN_DIM=15000` and `float64` needs about 50+ GB of GPU memory — it does not fit on a 40 GB GPU, but does fit on an 80 GB one.
-
-**Results differ slightly between runs, or between GPUs**
-Both `ml_model.py` and `inverse_design.py` set `--xla_gpu_deterministic_ops=true` via `XLA_FLAGS`, and every random draw (model init, data split/shuffle, jitter noise) is derived from a fixed `SEED` through `jax.random.fold_in`. This gives exact, bit-for-bit reproducibility **on the same GPU architecture and software stack** (same CUDA/cuDNN/XLA/JAX versions). It does **not** guarantee bit-identical results across genuinely different hardware or library versions — floating-point rounding order can still differ, and small per-step differences can compound over a long optimisation.
-
-**Notebook `ModuleNotFoundError` for `data_generate`/`ml_model`/`inverse_design`**
-The project root must be on `sys.path`. `sample_workflow.ipynb` handles this automatically in its first cell (it detects the project root whether launched from the repo root or from inside `notebooks/`) — if you copy code out of the notebook elsewhere, make sure to add the project root to `sys.path` first.
-
-**`[WinError 206] The filename or extension is too long`** (Windows only)
-Installing `flax` pulls in `orbax-checkpoint`, which can exceed Windows' 260-character path limit. Enable Windows Long Path support (`gpedit.msc` → System → Filesystem → "Enable Win32 long paths"), or use WSL2 / native Linux.
-
-**`WARNING:absl:Tensorflow library not found` / `WARNING:absl:The transformations API will eventually be replaced...`**
-Both harmless — Flax/Orbax checkpoint-backend warnings unrelated to correctness in this workflow.
-
-</details>
-
----
 
 ## Citation
 
