@@ -17,4 +17,3 @@ The notebooks and `inverse_design_evolution.py` require NumPy and Matplotlib. Th
 
 Run the notebooks from this directory so their relative paths resolve correctly.
 
-`training_curves.ipynb` uses the measured `n=8` FNN history by default. Set `USE_SYNTHETIC_N8_FNN = True` in its setup cell to plot the separately identified synthetic extrapolation.
