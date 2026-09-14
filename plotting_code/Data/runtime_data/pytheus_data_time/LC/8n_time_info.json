@@ -51,9 +51,7 @@
     7250.122730978299,
     11560.398133728188
   ],
-  "_source": "Time_pytheus benchmark/results/full_benchmark, Stage 1 only (Stage 2 blocked)",
-  "_source_file": "benchmark/results/full_benchmark/Cluster_N8_stage1.csv",
+  "_source": "LC n=8 PyTheus runtime benchmark, stage 1",
   "_n_samples": 50,
-  "_note": "Time_pre_opt here = per-sample stage1_total_time (genuine per-sample duration, not cumulative): loss setup + complete-graph optimization + bulk-threshold deletion + truncated-graph re-optimization + save, timed via time.perf_counter() per sample. Rebuilt by rebuild_pytheus_lc_n8_timing.py from the final, complete CSV (job 8438291 original samples 0-11 + resume job 8531784 samples 12-49, both stage2=False, same Cluster_8.json config) -- replaces a stale 46-sample mid-run progress snapshot captured before the original job's 2-day timeout forced the resume.",
-  "_generated": "2026-09-12T20:40:33.398158+00:00"
+  "_note": "Time_pre_opt contains the complete per-sample runtime for 50 successful benchmark runs. Values are durations in seconds, not cumulative times."
 }

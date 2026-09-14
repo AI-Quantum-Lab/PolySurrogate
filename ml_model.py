@@ -39,36 +39,30 @@ from utils import (
 # 1. PARAMETERS
 # =============================================================================
 
-NODES = 8
+NODES = 4
 MODEL_NAME = "PNN"                 # "PNN" or "FNN"
-HIDDEN_DIM = 15000   # FNN example: (2000, 2000, 2000)
+HIDDEN_DIM = 400                      # FNN example: (400, 400, 400)
 NORMALIZE_MODEL_OUTPUT = False
 
-DATA_PATH = "/home/bo48god/quick_tests/data_unnormalised/n8_20M/dataset_merged.npz"
-DATA_SIZE = 10_000_000     # reduced from full 20M -- full size OOM'd on 40GB A100 (needed >40GB actual GPU mem vs ~26.5GB estimate); 10M gives ~13.2GB train+val on GPU, safe margin
+DATA_PATH = "results/data_generation/n4/n4_0/dataset_merged.npz"
+DATA_SIZE = None
 TRAIN_SPLIT = 0.8
 VAL_SPLIT = 0.1
 TEST_SPLIT = 0.1
 
-# "shuffled" (default, original behavior of this file): seeded
-# jax.random.permutation split. "contiguous": first TRAIN_SPLIT fraction ->
-# train, next VAL_SPLIT -> val, rest -> test, no randomness at all. Added
-# specifically to A/B test how much the historical unseeded-shuffle
-# split (which can't be recovered) actually matters for the loss
-# trajectory, by comparing against this seeded code with everything else
-# held fixed.
+# "shuffled" uses a seeded permutation. "contiguous" preserves input order.
 SPLIT_MODE = "contiguous"    # "shuffled" or "contiguous"
 
 LEARNING_RATE = 1e-3
 FINAL_LEARNING_RATE = 1e-5
-LR_DECAY_UNTIL_EPOCH = 2000
+LR_DECAY_UNTIL_EPOCH = 20
 WEIGHT_DECAY = 1e-4
-BATCH_SIZE = 8000
-NUM_EPOCHS = 10
-PATIENCE = 100000
+BATCH_SIZE = 200
+NUM_EPOCHS = 20
+PATIENCE = 20
 TOLERANCE = 1e-7
 
-SEED = 158
+SEED = 42
 PRECISION = "float32"              # "float32" or "float64"
 DATASET_HASH_MODE = "fast"         # "full", "fast", or "none"
 
@@ -106,16 +100,7 @@ CONFIG = {
 
 configure_precision(PRECISION)
 
-# Explicitly request the fastest matmul precision mode for float32 (allows
-# TF32 tensor-core execution on Ampere+ GPUs). Investigated because the
-# float32 6FNN run was empirically SLOWER than the float64 one on A100 with
-# --xla_gpu_deterministic_ops=true set -- suspected cause: without an
-# explicit precision request, XLA's kernel selection under deterministic
-# mode was not taking the fast TF32 path for float32 matmuls, while A100's
-# native FP64 tensor cores gave float64 a real hardware advantage instead.
-# Scoped to this file only (not utils.py), since utils.py is shared by
-# ml_model.py, whose established reproducibility comparisons (fold_in
-# vs split, CPU vs GPU) should not have their numerics touched by this.
+# Use the standard fast float32 matrix-multiplication mode.
 if PRECISION == "float32":
     jax.config.update("jax_default_matmul_precision", "default")
 

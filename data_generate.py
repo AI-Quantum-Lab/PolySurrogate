@@ -22,7 +22,7 @@ When saved, a `reproducibility_manifest.json` is also written alongside
 pytheus/numpy versions, devices), the resolved config (including the seed),
 and a hash of the generated dataset file itself. Stage 2 (ml_model.py)
 reads `dataset_merged.npz` from whichever `out_dir` this run produced --
-there is no direct code import between the numbered stage scripts, only
+there is no direct code import between the stage scripts, only
 the generated folder.
 """
 
@@ -57,11 +57,11 @@ from utils import (
 VERTICES = 4          # graph vertices / photons / modes
 DIMENSIONS = 2         # local Hilbert-space dimension (2 = qubit-like)
 
-N_SAMPLES = 20_000000       # total samples to generate
-BATCH_SIZE = 5000  # matches historical dataset-generation batch structure
-SHARD_SIZE = 500_000      # max samples per saved shard file
+N_SAMPLES = 5_000       # total samples to generate
+BATCH_SIZE = 500        # samples evaluated per JAX batch
+SHARD_SIZE = 5_000      # maximum samples per saved shard
 
-SEED = 59              # np.random.default_rng seed -- reproducible given the
+SEED = 42              # np.random.default_rng seed -- reproducible given the
                        # same seed and a full identical rerun (see note at
                        # the bottom of this file on what this guarantees).
 
@@ -85,7 +85,7 @@ NORMED_DATA = False
 
 # Numerical precision for generated weights, amplitudes, shards, and merged data.
 # Change only this line to switch the entire data-generation pipeline.
-PRECISION = "float32"  # "float32" or "float64", data used for training the model, was produced with float32, so keep it that way for now.
+PRECISION = "float32"  # "float32" or "float64"
 if PRECISION not in {"float32", "float64"}:
     raise ValueError("PRECISION must be 'float32' or 'float64'")
 

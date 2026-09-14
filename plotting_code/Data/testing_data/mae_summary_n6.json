@@ -8,9 +8,9 @@
     20000000
   ],
   "note": "Full contiguous test pool (all 2,000,000 rows), not a subsample. Previous version of this file used a 1,000-sample random subsample (sample_seed=4) of the same test_range; superseded 2026-09-12.",
-  "dataset_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate_temp/results/data_generation/n6/n6_0/dataset_merged.npz",
+  "dataset_path": "results/data_generation/n6/n6_0/dataset_merged.npz",
   "hidden_dim": 2000,
-  "model_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate_temp/results/model_training/PNN/n6/n6_0/params.msgpack",
+  "model_path": "results/model_training/PNN/n6/n6_0/params.msgpack",
   "input_dim": 60,
   "out_dim": 64,
   "training_seed": 159,
@@ -21,5 +21,5 @@
   "mae_median": 3.856188413919881e-06,
   "mae_min": 1.0532967280596495e-06,
   "mae_max": 1.2118849554099143e-05,
-  "mae_values_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate_temp/plotting_code/Data/testing_data/mae_values_n6.npy"
+  "mae_values_path": "plotting_code/Data/testing_data/mae_values_n6.npy"
 }

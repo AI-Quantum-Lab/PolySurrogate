@@ -1,9 +1,9 @@
 """
-utils.py -- shared functions used by 01_data_generate.py, 02_ml_model.py,
+utils.py -- shared functions used by data_generate.py, ml_model.py,
 and inverse_design.py.
 
 This file holds only genuinely common code: things that would otherwise be
-byte-for-byte duplicated across two or more of the numbered stage scripts
+byte-for-byte duplicated across two or more stage scripts
 (PyTheus catalog/amplitude computation, the FNN/PNN model definitions,
 reproducibility primitives, fidelity, JSON I/O). Each stage script keeps its
 own parameters and orchestration logic -- this file has no "main" behaviour
@@ -79,8 +79,8 @@ def write_json(path: Path, data: dict) -> None:
 # PyTheus catalog + amplitude computation
 # =============================================================================
 #
-# Shared by 01_data_generate.py (fresh random samples), 02_ml_model.py's
-# training target (the amplitudes 01 produced), and inverse_design.py
+# Shared by data_generate.py (fresh random samples), ml_model.py's
+# training target (the amplitudes it produces), and inverse_design.py
 # (both for generating fresh starting samples and for PyTheus verification
 # of the optimiser's current graph against the target state).
 
@@ -264,7 +264,7 @@ KEY_TAG_OPTIMISER_JITTER = 5
 
 
 def derive_root_keys(seed: int) -> dict:
-    """Used by 02_ml_model.py. Independent keys for model init, dataset
+    """Used by ml_model.py. Independent keys for model init, dataset
     split, epoch shuffling, and a reserved dropout/batch-level slot."""
     root_key = jax.random.PRNGKey(seed)
     return {

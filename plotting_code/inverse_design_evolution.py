@@ -1,84 +1,20 @@
-"""
-Loss-evolution figure for the GHZ (n=4) inverse-design optimisation,
-sample 0 -- linear-scale and log-scale versions.
+"""Plot the loss and graph evolution of one recorded GHZ n=4 design run.
 
-Reference figure this reproduces the structure of:
-    results/rerun_GHZ4_min_edge_store_all_vectors/graph_data_for_xuemei/
-    graph_evolution_loss_curve.png / .pdf
-("GHZ4 min-edge optimisation: loss curve and graph evolution (sample 0)")
-That file is READ-ONLY here and is not modified; this script only reads its
-sibling data files (graph_weights_all_steps.json / .npy, in the same
-folder), which contain the full, real, already-recorded per-step
-trajectory (loss, fidelity, and graph edge weights) for this exact
-optimisation run -- see that folder's README_for_Xuemei.txt for full
-provenance (no rerun was performed to produce that data; it was reshaped
-directly from results/rerun_GHZ4_min_edge_sample_every50/sample_0/
-sample_info_file.json, which is the original, authoritative run).
+The figure combines the full loss curve with graph snapshots at steps 0,
+50, 100, and after final pruning. Only NumPy and Matplotlib are required.
 
-Same structure as the reference figure:
-    - loss curve on top (full width)
-    - four graph snapshots below (step 0 / 50 / 100 / final pruned), drawn
-      with the project's vertex layout/colour convention (src/graph_viz.py)
-      but with a LOCAL edge-drawing routine (draw_edges_opacity_only) that
-      uses a fixed line width for every active edge and varies only alpha
-      (opacity) with |weight| -- unlike graph_viz.py's own _draw_edges,
-      which varies both thickness and opacity together. No per-edge weight
-      numbers are drawn.
-    - arrows connecting each selected optimisation step on the loss curve
-      down to its corresponding graph snapshot
-    - simple, large, bold "fid=..." annotation at each selected point
-
-This script produces the SAME selected checkpoints (steps 0, 50, 100,
-final_pruned) in both the linear-scale and log-scale versions, per an
-explicit request. Titles, axis labels, tick labels, fidelity annotations,
-graph captions, and the bottom explanatory caption are all sized up and
-bold, for readability when pasted into slides.
-
-Needs the repo's own pytheus/jax venv (graph_viz.py and th.edgeBleach
-import pytheus):
-    .venv/bin/python3 generate_loss_evolution_figure.py
+Run from the repository root with:
+    python plotting_code/inverse_design_evolution.py
 """
 
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
-from pytheus import theseus as th
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parent
-assert (REPO_ROOT / "utils.py").exists(), (
-    f"Expected repo root at {REPO_ROOT} (parent of plotting_code/) to contain "
-    "utils.py -- checked by file presence, not by directory name, since the "
-    "repo folder itself may be cloned/renamed to anything (e.g. "
-    "PolySurrogate_temp, PolySurrogate_verify)."
-)
-
-# The original "store_all_vectors" rerun (graph_weights_all_steps.json/.npy)
-# does not exist on this machine. Instead, this reconstructs the identical
-# per-step trajectory (weights/loss/fidelity at every optimisation step)
-# from the standard per-sample record that the production GHZ n=4 run
-# already writes for every sample -- sample_info_file.json has the full
-# x_history/loss_history/fid_history arrays plus the final pruned state,
-# which is everything this figure needs.
-SAMPLE_INFO_PATH = (
-    REPO_ROOT / "results" / "inverse_design" / "GHZ_n4" / "GHZ_n4_0"
-    / "sample_0" / "sample_info_file.json"
-)
-
-sys.path.insert(0, str(SCRIPT_DIR))
-from graph_viz import (  # noqa: E402
-    vertex_positions,
-    _draw_nodes,
-    _finalize_ax,
-    _quadratic_bezier,
-    EDGE_COLORS,
-)
-
-sys.path.insert(0, str(REPO_ROOT))
-import utils  # noqa: E402
+SAMPLE_INFO_PATH = SCRIPT_DIR / "Data" / "inverse_design_evolution" / "sample_info_file.json"
 
 OUTPUT_DIR = SCRIPT_DIR / "Results" / "inverse_design_evolution"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -86,14 +22,12 @@ SELECTED_STEPS = [0, 50, 100, "final_pruned"]
 STEP_TITLES = {0: "Random init (step 0)", 50: "Step 50", 100: "Step 100",
                "final_pruned": "Final (pruned)"}
 
-# Fixed line width for every active edge; only alpha (opacity) varies with
-# |weight|, per an explicit request (no thickness variation).
+# Fixed line width for every active edge; opacity represents |weight|.
 EDGE_LINEWIDTH = 2.6
 EDGE_ALPHA_MIN = 0.15
 EDGE_ALPHA_MAX = 1.0
 
-# Node-number label size inside each graph snapshot (graph_viz.py's own
-# _draw_nodes default is 19.0; reduced by 1 point per an explicit request).
+# Node-number label size inside each graph snapshot.
 NODE_LABEL_FONTSIZE = 18.0
 
 FIGSIZE = (13, 8.5)
@@ -116,21 +50,90 @@ plt.rcParams.update({
 
 ARROW_COLOR = "#E76F51"
 CURVE_COLOR = "#2E86AB"
+EDGE_COLORS = ["dodgerblue", "firebrick", "limegreen", "darkorange", "purple", "yellow", "cyan"]
+
+
+def build_edge_catalog(vertices=4, dimensions=2):
+    """Build the ordered, loop-free edge catalogue used by this figure."""
+    return [
+        (vertex_1, vertex_2, mode_1, mode_2)
+        for vertex_1 in range(vertices)
+        for vertex_2 in range(vertex_1 + 1, vertices)
+        for mode_1 in range(dimensions)
+        for mode_2 in range(dimensions)
+    ]
+
+
+def group_edges_by_vertices(edges):
+    """Group the internal-mode pairs belonging to each vertex pair."""
+    grouped = {}
+    for vertex_1, vertex_2, mode_1, mode_2 in edges:
+        grouped.setdefault((vertex_1, vertex_2), []).append((mode_1, mode_2))
+    return grouped
+
+
+def vertex_positions(n, rotation=0.0, clockwise=False):
+    """Return evenly spaced circular positions for numbered graph vertices."""
+    angles = np.linspace(0, 2 * np.pi * (n - 1) / n, n)
+    if clockwise:
+        angles = -angles
+    angles += rotation
+    radius = 0.9
+    return {i: (radius * np.cos(angle), radius * np.sin(angle)) for i, angle in enumerate(angles)}
+
+
+def quadratic_bezier(p0, p1, p2, t):
+    """Evaluate a quadratic Bezier curve at coordinates ``t``."""
+    t = t[:, None]
+    return (1 - t) ** 2 * p0 + 2 * (1 - t) * t * p1 + t**2 * p2
+
+
+def draw_nodes(ax, vertices, radius=0.15, fontsize=19.0):
+    """Draw graph vertices and their integer labels."""
+    for index, (x_coord, y_coord) in vertices.items():
+        ax.add_patch(
+            plt.Circle(
+                (x_coord, y_coord),
+                radius,
+                facecolor="lightgrey",
+                edgecolor="dimgray",
+                linewidth=2.2,
+                zorder=10,
+            )
+        )
+        ax.text(
+            x_coord,
+            y_coord,
+            str(index),
+            fontsize=fontsize,
+            ha="center",
+            va="center",
+            zorder=11,
+            fontweight="bold",
+        )
+
+
+def finalize_graph_axis(ax, node_radius=0.15):
+    """Apply the common limits and clean styling to a graph axis."""
+    limit = 1.0 + node_radius + 0.25
+    ax.set_xlim(-limit, limit)
+    ax.set_ylim(-limit, limit)
+    ax.set_aspect("equal")
+    ax.axis("off")
 
 
 def draw_edges_opacity_only(ax, edges, weights, verts, curvature, multi_edge_spacing=0.75):
-    """Same curved-edge drawing as graph_viz._draw_edges, but with a FIXED
-    linewidth for every active edge -- only alpha (opacity) encodes
-    |weight|. Inactive (zero-weight) edges are skipped entirely, same as
-    the original.
+    """Draw active curved edges with fixed width and weight-based opacity.
+
+    Inactive (zero-weight) edges are skipped entirely.
     """
     edge_to_idx = {e: i for i, e in enumerate(edges)}
-    bleached = th.edgeBleach(edges)
+    grouped_edges = group_edges_by_vertices(edges)
 
     curve_t_half1 = np.linspace(0.0, 0.5, 24)
     curve_t_half2 = np.linspace(0.5, 1.0, 24)
 
-    for (v1, v2), colorings in bleached.items():
+    for (v1, v2), colorings in grouped_edges.items():
         mult = len(colorings)
         vert1 = np.array(verts[int(v1)])
         vert2 = np.array(verts[int(v2)])
@@ -148,8 +151,8 @@ def draw_edges_opacity_only(ax, edges, weights, verts, curvature, multi_edge_spa
             offset = (2 * ind - mult + 1) * multi_edge_spacing * curvature
             ctrl = mid + offset * rect
 
-            pts1 = _quadratic_bezier(vert1, ctrl, vert2, curve_t_half1)
-            pts2 = _quadratic_bezier(vert1, ctrl, vert2, curve_t_half2)
+            pts1 = quadratic_bezier(vert1, ctrl, vert2, curve_t_half1)
+            pts2 = quadratic_bezier(vert1, ctrl, vert2, curve_t_half2)
 
             col1 = EDGE_COLORS[int(c1) % len(EDGE_COLORS)]
             col2 = EDGE_COLORS[int(c2) % len(EDGE_COLORS)]
@@ -163,23 +166,15 @@ def draw_edges_opacity_only(ax, edges, weights, verts, curvature, multi_edge_spa
 
 
 def load_records():
-    """Reconstruct the same (records, edge_tuples, W, all_records) structure
-    the original store_all_vectors data provided, from sample_info_file.json.
+    """Load the recorded loss, fidelity, and graph-weight trajectory.
 
-    Step semantics, matching sample_info_file.json's own arrays:
-      - x_history[0] is the pre-optimisation start point (step 0); loss/fid
-        for step 0 come from init_loss/nn_fid_init (not tracked in
-        loss_history/fid_history, which only cover steps 1..N).
-      - x_history[i] (i=1..N) is the weight vector AFTER step i, with
-        loss_history[i-1]/fid_history[i-1] the loss/fidelity at that step.
-      - The final_pruned record reuses the last pre-pruning loss for its
-        y-position, same convention as the original data (pruning does not
-        materially change the loss) -- see build_full_loss_curve.
+    ``x_history[0]`` is the initial graph. Each later entry is the graph
+    after that optimisation step. The pruned final graph is stored separately.
     """
     with open(SAMPLE_INFO_PATH, "r") as f:
         info = json.load(f)
 
-    edge_tuples, _, _, _ = utils.build_pytheus_catalog(4, 2)
+    edge_tuples = build_edge_catalog(vertices=4, dimensions=2)
 
     n_steps = int(info["optimisation_steps"])
     x_history = info["x_history"]
@@ -245,17 +240,12 @@ def draw_graph_on_ax(ax, edge_tuples, weights):
     curvature = float(np.clip(0.11 + 0.006 * active_count, 0.11, 0.30))
 
     draw_edges_opacity_only(ax, edge_tuples, weights_list, verts, curvature=curvature)
-    _draw_nodes(ax, verts, node_fontsize=NODE_LABEL_FONTSIZE)
-    _finalize_ax(ax)
+    draw_nodes(ax, verts, fontsize=NODE_LABEL_FONTSIZE)
+    finalize_graph_axis(ax)
 
 
 def build_full_loss_curve(all_records):
-    """Full 0..134 pre-pruning trajectory, plus the final_pruned point
-    placed one step after the last recorded step (its loss is not
-    separately recorded -- pruning does not materially change the loss,
-    so the last pre-pruning loss value is reused for its y-position, per
-    the same convention as the reference figure).
-    """
+    """Return the full trajectory with final pruning as one extra point."""
     pre_pruning = [r for r in all_records if not r["is_final_pruned"]]
     steps = np.array([r["step"] for r in pre_pruning])
     losses = np.array([r["loss"] for r in pre_pruning])

@@ -94,20 +94,18 @@ OUT_DIM = 2**NPHOTONS
 # True  → generate fresh random starting graphs
 # False → load starting graphs from CONDITIONED_DATA_PATH
 
-GENERATE_DATA = False
-CONDITIONED_DATA_PATH = (
-    "paper_data/inverse_init_fin_data/n4/GHZ/random_start_pool.npz"
-)
+GENERATE_DATA = True
+CONDITIONED_DATA_PATH = None
 MAX_INITIAL_SAMPLES = None
 
-DATA_SAMPLES = 1000
-DATA_BATCH_SIZE = 5
-DATA_SEED = 4
+DATA_SAMPLES = 3
+DATA_BATCH_SIZE = 3
+DATA_SEED = 42
 
 # Discard generated samples already too close to the target.
 LOW_FIDELITY_THRESHOLD = 0.999
 
-# Must match NORMED_DATA in 01_data_generate.py.
+# Must match NORMED_DATA in data_generate.py.
 NORMED_DATA = False
 
 
@@ -119,7 +117,7 @@ NORMED_DATA = False
 # FNN: tuple matching HIDDEN_DIM in ml_model.py
 ARCHITECTURE = 400
 
-MODEL_PATH = "results/model_training/PNN/n4/n4_5/best_params.msgpack"
+MODEL_PATH = "results/model_training/PNN/n4/n4_0/best_params.msgpack"
 
 # Must match NORMALIZE_MODEL_OUTPUT in ml_model.py.
 NORMALIZE_MODEL_OUTPUT = False
@@ -139,14 +137,14 @@ LAMBDA_L1 = 1e-3
 # Optimisation
 # -----------------------------------------------------------------------------
 
-SEED = 46
-NUM_STEPS = 100000                 # Smoke test; use 10_000+ for production
-MAX_TOTAL_STEPS = 100000           # Hard ceiling; defaults to NUM_STEPS if unset
+SEED = 42
+NUM_STEPS = 300
+MAX_TOTAL_STEPS = 300              # Hard ceiling; defaults to NUM_STEPS if unset
 EARLY_STOP_NN_FID = 0.99999
 
 LEARNING_RATE = 1e-2
 MIN_LEARNING_RATE = 1e-6
-LR_DECAY_STEPS = 100000            # For smoke tests, normally match NUM_STEPS
+LR_DECAY_STEPS = 300               # Normally match NUM_STEPS
 LR_EXPONENT = 1.0
 
 CLIP_MIN = -1.0
@@ -192,8 +190,8 @@ STUCK_MIN_IMPROVEMENT = 1e-4
 # Verification and logging
 # -----------------------------------------------------------------------------
 
-PRINT_EVERY = 1
-VERIFY_EVERY = 1
+PRINT_EVERY = 25
+VERIFY_EVERY = 25
 
 # Storing every gradient and update vector can produce very large output files.
 STORE_STEP_VECTORS = False
@@ -298,6 +296,21 @@ def get_target_state(target_name: str, n: int) -> np.ndarray:
     raise ValueError(f"Unknown target state: {target_name}")
 
 
+def resolve_target_state(cfg: Dict[str, Any]) -> np.ndarray:
+    """Return a named target or an explicitly supplied amplitude vector."""
+    custom_target = cfg.get("target_state")
+    if custom_target is None:
+        return get_target_state(cfg["target_name"], cfg["n"])
+
+    target = np.asarray(custom_target, dtype=np.float32)
+    expected_shape = (2 ** int(cfg["n"]),)
+    if target.shape != expected_shape:
+        raise ValueError(f"target_state must have shape {expected_shape}, found {target.shape}")
+    if not np.all(np.isfinite(target)) or np.linalg.norm(target) == 0:
+        raise ValueError("target_state must contain finite values and have a nonzero norm")
+    return target
+
+
 # =============================================================================
 # JSON / misc helpers
 # =============================================================================
@@ -396,7 +409,7 @@ def load_model_training_info(model_path: str) -> dict:
 def prepare_input_data(cfg: Dict[str, Any]):
     """Returns [(k_value, X, Y)] -- fresh samples if cfg['generate_data'],
     else loaded from cfg['conditioned_data_path']."""
-    target_state = get_target_state(cfg["target_name"], cfg["n"])
+    target_state = resolve_target_state(cfg)
 
     if cfg.get("generate_data", False):
         X_low, Y_low = generate_low_fidelity_dataset(cfg, target_state)
@@ -774,7 +787,8 @@ def _next_run_dir(results_root: str, target_name: str, nphotons: int) -> Path:
 
 def _default_cfg() -> dict:
     return dict(
-        n=NPHOTONS, dimensions=2, target_name=TARGET_NAME, model_type=MODEL_TYPE,
+        n=NPHOTONS, dimensions=2, target_name=TARGET_NAME, target_state=None,
+        model_type=MODEL_TYPE,
         generate_data=GENERATE_DATA, conditioned_data_path=CONDITIONED_DATA_PATH,
         max_initial_samples=MAX_INITIAL_SAMPLES,
         data_samples=DATA_SAMPLES, data_batch_size=DATA_BATCH_SIZE, data_seed=DATA_SEED,
@@ -802,7 +816,7 @@ def run_optimisation(cfg: dict | None = None):
     config file is read either way."""
     cfg = dict(_default_cfg()) if cfg is None else dict(cfg)
 
-    target_state_np = get_target_state(cfg["target_name"], cfg["n"])
+    target_state_np = resolve_target_state(cfg)
     target_state_jax = jnp.asarray(target_state_np, dtype=jnp.float32)
 
     data = prepare_input_data(cfg)

@@ -2,8 +2,8 @@
   "nphotons": 8,
   "target_name": "N/A (generic random dense graph test-slice samples, not target-conditioned)",
   "model_type": "PNN",
-  "model_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/results/model_training/PNN/n8/n8_1/best_params.msgpack",
-  "dataset_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/results/data_generation/n8/n8_0/dataset_merged.npz",
+  "model_path": "results/model_training/PNN/n8/n8_1/best_params.msgpack",
+  "dataset_path": "results/data_generation/n8/n8_0/dataset_merged.npz",
   "test_range": [
     18000000,
     20000000

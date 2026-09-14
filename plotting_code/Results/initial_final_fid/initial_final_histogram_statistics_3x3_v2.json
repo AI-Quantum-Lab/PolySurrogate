@@ -13,7 +13,7 @@
         "final_std": 7.407941017352626e-07,
         "final_min": 0.9999884366989136,
         "final_max": 0.9999949932098389,
-        "summary_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/plotting_code/Data/runtime_data/surrogate_optimisation/GHZ/4n.json"
+        "summary_path": "plotting_code/Data/runtime_data/surrogate_optimisation/GHZ/4n.json"
     },
     {
         "target": "GHZ",
@@ -29,7 +29,7 @@
         "final_std": 1.0585775246486893e-06,
         "final_min": 0.9999885559082031,
         "final_max": 0.9999977350234985,
-        "summary_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/plotting_code/Data/runtime_data/surrogate_optimisation/GHZ/6n.json"
+        "summary_path": "plotting_code/Data/runtime_data/surrogate_optimisation/GHZ/6n.json"
     },
     {
         "target": "GHZ",
@@ -45,7 +45,7 @@
         "final_std": 1.293262453319751e-06,
         "final_min": 0.9999892711639404,
         "final_max": 0.9999979734420776,
-        "summary_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/plotting_code/Data/runtime_data/surrogate_optimisation/GHZ/8n.json"
+        "summary_path": "plotting_code/Data/runtime_data/surrogate_optimisation/GHZ/8n.json"
     },
     {
         "target": "W",
@@ -61,7 +61,7 @@
         "final_std": 4.499141788441993e-07,
         "final_min": 0.9999887943267822,
         "final_max": 0.9999935626983643,
-        "summary_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/plotting_code/Data/runtime_data/surrogate_optimisation/W/4n.json"
+        "summary_path": "plotting_code/Data/runtime_data/surrogate_optimisation/W/4n.json"
     },
     {
         "target": "W",
@@ -77,7 +77,7 @@
         "final_std": 9.599329428952486e-07,
         "final_min": 0.9999890327453613,
         "final_max": 0.9999959468841553,
-        "summary_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/plotting_code/Data/runtime_data/surrogate_optimisation/W/6n.json"
+        "summary_path": "plotting_code/Data/runtime_data/surrogate_optimisation/W/6n.json"
     },
     {
         "target": "W",
@@ -93,7 +93,7 @@
         "final_std": 9.303213936993296e-07,
         "final_min": 0.9999889135360718,
         "final_max": 0.9999957084655762,
-        "summary_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/plotting_code/Data/runtime_data/surrogate_optimisation/W/8n.json"
+        "summary_path": "plotting_code/Data/runtime_data/surrogate_optimisation/W/8n.json"
     },
     {
         "target": "LC",
@@ -109,7 +109,7 @@
         "final_std": 5.989093689372116e-07,
         "final_min": 0.9999889135360718,
         "final_max": 0.9999955892562866,
-        "summary_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/plotting_code/Data/runtime_data/surrogate_optimisation/LC/4n.json"
+        "summary_path": "plotting_code/Data/runtime_data/surrogate_optimisation/LC/4n.json"
     },
     {
         "target": "LC",
@@ -125,7 +125,7 @@
         "final_std": 1.3099752507312856e-06,
         "final_min": 0.9999887943267822,
         "final_max": 0.999997615814209,
-        "summary_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/plotting_code/Data/runtime_data/surrogate_optimisation/LC/6n.json"
+        "summary_path": "plotting_code/Data/runtime_data/surrogate_optimisation/LC/6n.json"
     },
     {
         "target": "LC",
@@ -141,6 +141,6 @@
         "final_std": 1.596462942854059e-06,
         "final_min": 0.9999892711639404,
         "final_max": 0.9999978542327881,
-        "summary_path": "/home/bo48god/projects/deep_dreaming/PolySurrogate/plotting_code/Data/runtime_data/surrogate_optimisation/LC/8n.json"
+        "summary_path": "plotting_code/Data/runtime_data/surrogate_optimisation/LC/8n.json"
     }
 ]

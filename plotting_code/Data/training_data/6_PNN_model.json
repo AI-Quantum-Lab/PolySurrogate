@@ -25,7 +25,7 @@
   "test_split": 0.1,
   "split_mode": "contiguous",
   "dataset": [
-    "/home/bo48god/projects/deep_dreaming/PolySurrogate/results/data_generation/n6/n6_0/dataset_merged.npz"
+    "results/data_generation/n6/n6_0/dataset_merged.npz"
   ],
   "data_size": [
     null

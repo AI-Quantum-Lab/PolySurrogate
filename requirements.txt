@@ -1,23 +1,19 @@
 # Core dependencies for PolySurrogate.
-# Python >= 3.10 recommended (developed/tested with 3.12.7). JAX/Flax
+# Python >= 3.11 required (developed/tested with 3.12.7). JAX/Flax
 # compatibility can vary by platform and CUDA version — see
 # https://jax.readthedocs.io/en/latest/installation.html for GPU-specific
 # install instructions. This installs a CPU-only JAX build; for GPU support,
 # afterwards run e.g. `pip install --upgrade "jax[cuda12]"` — see
 # README.md -> Installation.
 #
-# Windows note: installing flax pulls in orbax-checkpoint, which can fail on
-# native Windows with "WinError 206: The filename or extension is too long".
-# See README.md -> Troubleshooting before installing on native Windows.
-# WSL2/Linux/HPC is the recommended environment for the full training workflow.
-numpy
-matplotlib
-jax
-flax
-optax
-pytheusQ   # PyPI distribution name; imports as "pytheus" (pytheus.theseus)
+# WSL2, Linux, or HPC environments are recommended for full training runs.
+numpy==2.3.5
+matplotlib==3.10.8
+jax==0.8.2
+flax==0.12.2
+optax==0.2.6
+pytheusQ==1.2.21   # PyPI distribution name; imports as "pytheus"
 
-# Needed only to run notebooks/sample_workflow.ipynb and plotting_code/*.ipynb
-# (not required for the three main scripts run from the terminal):
-# jupyter
-# ipykernel
+# Notebook interface used by the example and plotting workflows.
+jupyter==1.1.1
+ipykernel==7.1.0

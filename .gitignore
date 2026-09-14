@@ -1,7 +1,5 @@
 # =============================================================================
-# surrogate_model_clean — .gitignore
-# Only source code, configs, notebooks, scripts, and docs are tracked.
-# Everything below is generated locally and must not be committed.
+# PolySurrogate generated and local files
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -24,14 +22,14 @@ venv/
 env/
 
 # ---------------------------------------------------------------------------
-# Generated data (produced by data_generation.py / merge_shards_to_npz)
+# Generated datasets
 # ---------------------------------------------------------------------------
 data/
 *.npz
 *.dat
 
 # ---------------------------------------------------------------------------
-# Model outputs (produced by model_training.py)
+# Model outputs
 # ---------------------------------------------------------------------------
 Models*/
 checkpoints/
@@ -43,7 +41,7 @@ test_metrics.npz
 run_log.txt
 
 # ---------------------------------------------------------------------------
-# Optimisation / experiment results (produced by optimiser.py)
+# Optimisation and experiment results
 # ---------------------------------------------------------------------------
 results/
 optimiser_*/
@@ -59,9 +57,3 @@ check_runs.log
 executed_*.ipynb
 *.aux
 missfont.log
-
-# ---------------------------------------------------------------------------
-# Exception: curated inverse-design initial-fidelity data, tracked on purpose
-# ---------------------------------------------------------------------------
-!paper_data/
-!paper_data/**
