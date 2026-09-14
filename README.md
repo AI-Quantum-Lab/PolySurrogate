@@ -64,7 +64,7 @@ Run all cells from top to bottom. The notebook:
 2. trains a small four-node PNN for 20 epochs;
 3. performs inverse design for one generated target state.
 
-Its settings are intentionally small. The notebook demonstrates the complete software workflow and does not reproduce the full paper-scale training runs.
+Its settings are intentionally small. The notebook demonstrates the complete software workflow, requires no external paper data, and does not reproduce the full paper-scale training runs.
 
 ## Running the three stages directly
 
@@ -76,26 +76,13 @@ python ml_model.py
 python inverse_design.py
 ```
 
-The first command creates `results/data_generation/n4/n4_0/dataset_merged.npz`. The second trains a model from that dataset and writes `results/model_training/PNN/n4/n4_0/best_params.msgpack`. The third uses that model for inverse design.
+| Script | Purpose | Output |
+|---|---|---|
+| `data_generate.py` | Sample graph weights and compute exact amplitudes with PyTheus | Dataset shards and a merged archive in `results/data_generation/` |
+| `ml_model.py` | Train a polynomial (`PNN`) or feedforward (`FNN`) surrogate | Training history, checkpoints, and metrics in `results/model_training/` |
+| `inverse_design.py` | Optimise graph weights for a target state and verify the result with PyTheus | Optimisation results in `results/inverse_design/` |
 
-Each script keeps its main settings near the top of the file. For larger experiments, update the dataset size, network architecture, epoch count, optimisation steps, and paths there.
-
-### Stage 1: data generation
-
-`data_generate.py` samples graph-edge weights and computes the corresponding exact amplitudes with PyTheus. It writes dataset shards and a merged NumPy archive under `results/data_generation/`.
-
-### Stage 2: model training
-
-`ml_model.py` trains either:
-
-- a polynomial neural network (`PNN`), or
-- a feedforward neural network (`FNN`).
-
-It writes training history, validation checkpoints, test metrics, and `best_params.msgpack` under `results/model_training/`.
-
-### Stage 3: inverse design
-
-`inverse_design.py` optimises graph weights through the trained surrogate, verifies the resulting state with PyTheus, and prunes small graph weights. Named GHZ, W, and linear-cluster targets are included. A custom amplitude vector can be passed as `target_state` through the configuration dictionary.
+Inverse design includes GHZ, W, and linear-cluster targets. A custom amplitude vector can be passed as `target_state` through the configuration dictionary.
 
 By default, starting graphs are generated in memory. Set `generate_data=False` and provide `conditioned_data_path` to use a downloaded starting pool.
 
@@ -131,11 +118,9 @@ Processed inputs are stored in `plotting_code/Data/`. Reference and regenerated 
 
 The full paper data and pretrained models will be published on Zenodo. The DOI and download instructions will be added here when the archive is ready.
 
-The small `sample_workflow.ipynb` does not depend on the Zenodo archive.
-
 ## Citation
 
-A paper citation and Zenodo DOI will be added when the associated records are published. Until then, cite this repository:
+A paper citation will be added when it is available. Until then, cite this repository:
 
 ```text
 AI-Quantum-Lab. PolySurrogate. https://github.com/AI-Quantum-Lab/PolySurrogate
